@@ -6,28 +6,24 @@ Murni menggunakan BeautifulSoup4 dan httpx di runtime proyek.
 
 import base64
 import json
-import os
 import re
 from typing import Optional
 
 import httpx
 from bs4 import BeautifulSoup
-from dotenv import load_dotenv
 
-load_dotenv()
+from vimms_downloader.config import Config, config as default_config
 
-BASE_URL     = "https://vimm.net"
-HTTP_TIMEOUT = int(os.getenv("HTTP_TIMEOUT", "30"))
+BASE_URL = "https://vimm.net"
 
-_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36"
-    ),
-    "Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Accept-Encoding": "gzip, deflate, br",
-}
+
+def _make_headers(user_agent: str) -> dict[str, str]:
+    return {
+        "User-Agent": user_agent,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+    }
 
 
 class VimmScraper:
@@ -40,10 +36,12 @@ class VimmScraper:
             results = scraper.search("mario", system="NES")
     """
 
-    def __init__(self) -> None:
+    def __init__(self, config: Optional[Config] = None) -> None:
+        self.config = config or default_config
+        headers = _make_headers(self.config.user_agent)
         self._client = httpx.Client(
-            headers=_HEADERS,
-            timeout=HTTP_TIMEOUT,
+            headers=headers,
+            timeout=self.config.http_timeout,
             follow_redirects=True,
         )
 
@@ -93,7 +91,7 @@ class VimmScraper:
         params: dict[str, str] = {"p": "list", "q": query}
         if system:
             params["system"] = system
-        qs  = "&".join(f"{k}={v}" for k, v in params.items())
+        qs = "&".join(f"{k}={v}" for k, v in params.items())
         soup = self._get(f"{BASE_URL}/vault/?{qs}")
 
         results: list[dict] = []
@@ -109,13 +107,13 @@ class VimmScraper:
             if not link:
                 continue
 
-            href  = link.get("href", "")
+            href = link.get("href", "")
             parts = href.strip("/").split("/")
             if parts and parts[-1].isdigit():
                 results.append({
                     "game_id": int(parts[-1]),
-                    "title":   link.get_text(strip=True),
-                    "url":     BASE_URL + href,
+                    "title": link.get_text(strip=True),
+                    "url": BASE_URL + href,
                 })
         return results
 
@@ -131,19 +129,19 @@ class VimmScraper:
         url = f"{BASE_URL}/vault/{system}"
         if letter:
             url += f"/{letter.upper()}"
-        soup    = self._get(url)
+        soup = self._get(url)
         results: list[dict] = []
 
         for link in soup.select("table.rounded.striped a[href]"):
-            href  = link.get("href", "")
+            href = link.get("href", "")
             if "/999999" in href or "display:none" in link.get("style", ""):
                 continue
             parts = href.strip("/").split("/")
             if len(parts) >= 2 and parts[-1].isdigit():
                 results.append({
                     "game_id": int(parts[-1]),
-                    "title":   link.get_text(strip=True),
-                    "url":     BASE_URL + href,
+                    "title": link.get_text(strip=True),
+                    "url": BASE_URL + href,
                 })
         return results
 
@@ -160,7 +158,7 @@ class VimmScraper:
         - ``title``     — decode Base64 dari ``canvas#canvas[data-v]``
         - ``filename``  — nama file ROM asli (canvas#canvas2)
         """
-        url  = f"{BASE_URL}/vault/{game_id}"
+        url = f"{BASE_URL}/vault/{game_id}"
         soup = self._get(url)
 
         # 1. Ekstrak array `media` dari tag script
@@ -181,7 +179,7 @@ class VimmScraper:
         for opt in soup.select("select#dl_format option"):
             formats.append({
                 "value": int(opt.get("value", 0)),
-                "name":  opt.get_text(strip=True),
+                "name": opt.get_text(strip=True),
                 "title": opt.get("title", ""),
             })
 
@@ -206,7 +204,7 @@ class VimmScraper:
         media_input = soup.select_one("input[name='mediaId']")
         default_media_id = int(media_input["value"]) if media_input else None
 
-        title         = self._decode_canvas(soup, "canvas#canvas")
+        title = self._decode_canvas(soup, "canvas#canvas")
         filename_hint = self._decode_canvas(soup, "canvas#canvas2")
 
         info: dict[str, str] = {}
@@ -223,24 +221,24 @@ class VimmScraper:
                 if key and val:
                     info[key] = val
 
-        size_el   = soup.select_one("#dl_size")
+        size_el = soup.select_one("#dl_size")
         file_size = size_el.get_text(strip=True) if size_el else None
 
         section_el = soup.select_one(".sectionTitle")
-        system     = section_el.get_text(strip=True) if section_el else None
+        system = section_el.get_text(strip=True) if section_el else None
 
         return {
-            "game_id":       game_id,
-            "title":         title,
-            "filename":      filename_hint,
-            "system":        system,
-            "media_id":      default_media_id,
-            "media_list":    media,
-            "formats":       formats,
-            "versions":      versions,
+            "game_id": game_id,
+            "title": title,
+            "filename": filename_hint,
+            "system": system,
+            "media_id": default_media_id,
+            "media_list": media,
+            "formats": formats,
+            "versions": versions,
             "download_host": download_host,
-            "year":          info.get("year"),
-            "players":       info.get("players"),
-            "file_size":     file_size,
-            "url":           url,
+            "year": info.get("year"),
+            "players": info.get("players"),
+            "file_size": file_size,
+            "url": url,
         }

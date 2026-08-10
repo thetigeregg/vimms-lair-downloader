@@ -16,28 +16,25 @@
       system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        python = pkgs.python312;
-
-        pythonEnv = python.withPackages (
-          ps: with ps; [
-            httpx
-            beautifulsoup4
-            lxml
-            click
-            rich
-            python-dotenv
-            anyio
-            socksio
-          ]
-        );
       in
       {
+        packages = {
+          default = pkgs.python3Packages.callPackage ./package.nix { };
+          vimms-lair-downloader = self.packages.${system}.default;
+        };
+
+        apps.default = flake-utils.lib.mkApp {
+          drv = self.packages.${system}.default;
+          name = "vimms";
+        };
+
         devShells.default = pkgs.mkShell {
-          buildInputs = [
-            pythonEnv
-            pkgs.aria2
-            pkgs.wget
-            pkgs.git
+          inputsFrom = [ self.packages.${system}.default ];
+          packages = [
+            self.packages.${system}.default
+          ];
+          buildInputs = with pkgs; [
+            git
           ];
 
           shellHook = ''
@@ -45,10 +42,7 @@
             echo "   Python : $(python --version)"
             echo "   aria2c : $(aria2c --version | head -1)"
 
-            # Tambahkan direktori root ke PATH agar wrapper 'vimms' bisa dipanggil langsung
-            export PATH="$PWD:$PATH"
-
-            # Set LD_LIBRARY_PATH untuk C-extensions Python (libstdc++.so.6)
+            alias vimms="PYTHONPATH=\"$PWD:\$PYTHONPATH\" python -m vimms_downloader.cli"
             export LD_LIBRARY_PATH="${pkgs.stdenv.cc.cc.lib}/lib:${pkgs.zlib}/lib:$LD_LIBRARY_PATH"
           '';
         };

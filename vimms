@@ -1,6 +1,0 @@
-#!/usr/bin/env bash
-# Wrapper script untuk menjalankan vimms-lair-downloader di dalam lingkungan Nix.
-# Menambahkan root path proyek ini ke PYTHONPATH secara dinamis.
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PYTHONPATH="$SCRIPT_DIR" python -m vimms_downloader.cli "$@"

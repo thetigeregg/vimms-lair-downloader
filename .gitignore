@@ -1,6 +1,7 @@
 # Environment
 .env
 .direnv/
+result
 
 # Downloads
 downloads/
