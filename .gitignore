@@ -1,0 +1,23 @@
+# Environment
+.env
+.direnv/
+
+# Downloads
+downloads/
+roms/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*~
