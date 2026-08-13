@@ -16,6 +16,7 @@ dependencies = [
     "click>=8",
     "python-dotenv>=1",
     "anyio>=4",
+    "socksio",
 ]
 
 [project.scripts]
