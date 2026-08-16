@@ -31,7 +31,7 @@ def cli() -> None:
       vimms list-systems
       vimms search "mario" -s NES
       vimms info 17874
-      vimms download 17874 --format rvz --version 1.2
+      vimms download 17874 --format rvz --latest
     """
 
 
@@ -260,6 +260,12 @@ def cmd_info(game_id: int) -> None:
     help="Desired game version (e.g. 1.0, 1.1, 1.2).",
 )
 @click.option(
+    "--latest", "-L",
+    is_flag=True,
+    default=False,
+    help="Always select the newest available version (ignores --version).",
+)
+@click.option(
     "--output-dir", "-o",
     default=None,
     metavar="PATH",
@@ -269,6 +275,7 @@ def cmd_download(
     game_id: int,
     format: Optional[str],
     version: Optional[str],
+    latest: bool,
     output_dir: Optional[str],
 ) -> None:
     """Download a ROM/ISO by game ID.
@@ -276,8 +283,12 @@ def cmd_download(
     \b
     File is saved to: DOWNLOAD_DIR/<SYSTEM>/<title>/
     Example:
-      vimms download 17874 --format rvz --version 1.2
+      vimms download 17874 --format rvz --latest
     """
+    if latest and version:
+        console.print("[red]❌  --latest and --version are mutually exclusive.[/red]")
+        raise SystemExit(1)
+
     base_dir = Path(output_dir).expanduser() if output_dir else config.download_dir
 
     # --- Fetch game details ---
@@ -312,6 +323,13 @@ def cmd_download(
             avail_ver = ", ".join(detail.get("versions", []))
             console.print(f"[red]❌  Version '{version}' not found. Available options: {avail_ver}[/red]")
             return
+
+    if latest and detail.get("versions"):
+        newest_version = detail["versions"][-1]
+        for m in media_list:
+            if m.get("Version") == newest_version:
+                target_media = m
+                break
 
     if not target_media:
         # Look up the default mediaId record
