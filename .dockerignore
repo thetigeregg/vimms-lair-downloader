@@ -1,0 +1,13 @@
+.git
+.gitignore
+.env
+.env.example
+__pycache__
+*.pyc
+*.egg-info
+.venv
+result
+flake.nix
+flake.lock
+default.nix
+package.nix

@@ -1,10 +1,10 @@
-"""Data models dan konstanta sistem Vimm's Lair."""
+"""Data models and system constants for Vimm's Lair."""
 
 from dataclasses import dataclass
 from typing import Optional
 
-# Semua 36 sistem yang tersedia di vault.
-# Key = kode URL, Value = nama tampilan
+# All 36 systems available in the vault.
+# Key = URL code, Value = display name
 SYSTEMS: dict[str, str] = {
     "Atari2600": "Atari 2600",
     "Atari5200": "Atari 5200",
@@ -47,7 +47,7 @@ SYSTEMS: dict[str, str] = {
 
 @dataclass
 class GameInfo:
-    """Detail lengkap satu game dari halaman vault."""
+    """Full details of a single game from the vault page."""
 
     game_id:      int
     title:        str
@@ -63,7 +63,7 @@ class GameInfo:
 
 @dataclass
 class SearchResult:
-    """Satu baris hasil pencarian atau browse."""
+    """A single search or browse result row."""
 
     game_id: int
     title:   str

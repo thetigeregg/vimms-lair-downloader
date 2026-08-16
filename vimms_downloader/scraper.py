@@ -1,7 +1,7 @@
 """
-Scraper Vimm's Lair — pure httpx + BeautifulSoup4.
+Vimm's Lair scraper — pure httpx + BeautifulSoup4.
 
-Murni menggunakan BeautifulSoup4 dan httpx di runtime proyek.
+Uses only BeautifulSoup4 and httpx at project runtime.
 """
 
 import base64
@@ -28,9 +28,9 @@ def _make_headers(user_agent: str) -> dict[str, str]:
 
 class VimmScraper:
     """
-    Context-manager wrapper untuk sesi httpx.
+    Context-manager wrapper around an httpx session.
 
-    Contoh penggunaan::
+    Usage example::
 
         with VimmScraper() as scraper:
             results = scraper.search("mario", system="NES")
@@ -56,7 +56,7 @@ class VimmScraper:
     # ------------------------------------------------------------------
 
     def _get(self, url: str) -> BeautifulSoup:
-        """GET URL dan kembalikan BeautifulSoup dengan parser lxml."""
+        """GET a URL and return a BeautifulSoup object using the lxml parser."""
         resp = self._client.get(url)
         resp.raise_for_status()
         return BeautifulSoup(resp.text, "lxml")
@@ -64,8 +64,8 @@ class VimmScraper:
     @staticmethod
     def _decode_canvas(soup: BeautifulSoup, selector: str) -> str:
         """
-        Vimm.net meng-encode teks penting (judul, filename) sebagai
-        Base64 dalam atribut ``data-v`` elemen ``<canvas>``.
+        Vimm.net encodes important text (title, filename) as Base64
+        in the ``data-v`` attribute of a ``<canvas>`` element.
         """
         el = soup.select_one(selector)
         if el and el.get("data-v"):
@@ -81,7 +81,7 @@ class VimmScraper:
 
     def search(self, query: str, system: Optional[str] = None) -> list[dict]:
         """
-        Cari game berdasarkan query teks, opsional filter per sistem.
+        Search for games by text query, optionally filtered by system.
 
         URL: ``/vault/?p=list&q=<query>[&system=<system>]``
 
@@ -119,7 +119,7 @@ class VimmScraper:
 
     def browse(self, system: str, letter: Optional[str] = None) -> list[dict]:
         """
-        Browse daftar game untuk sistem tertentu, opsional filter per huruf.
+        Browse the game list for a given system, optionally filtered by letter.
 
         URL: ``/vault/<system>[/<LETTER>]``
 
@@ -147,21 +147,21 @@ class VimmScraper:
 
     def get_game_detail(self, game_id: int) -> dict:
         """
-        Ambil detail lengkap satu game dari ``/vault/<game_id>``.
+        Fetch the full details of a single game from ``/vault/<game_id>``.
 
-        Informasi yang di-extract:
-        - ``media_id``  — dari hidden input form download (statis, tanpa JS)
-        - ``media_list``— parsed list ``media`` berisi id, version, title dll
-        - ``formats``   — list format disk/ROM yang tersedia (e.g. .wbfs, .rvz)
-        - ``versions``  — list versi game yang tersedia (e.g. 1.0, 1.1, 1.2)
-        - ``download_host`` — domain cermin download (dl.vimm.net, dl2.vimm.net dll)
-        - ``title``     — decode Base64 dari ``canvas#canvas[data-v]``
-        - ``filename``  — nama file ROM asli (canvas#canvas2)
+        Extracted information:
+        - ``media_id``  — from the hidden download form input (static, no JS)
+        - ``media_list``— parsed ``media`` list containing id, version, title, etc.
+        - ``formats``   — list of available disk/ROM formats (e.g. .wbfs, .rvz)
+        - ``versions``  — list of available game versions (e.g. 1.0, 1.1, 1.2)
+        - ``download_host`` — download mirror domain (dl.vimm.net, dl2.vimm.net, etc.)
+        - ``title``     — Base64-decoded from ``canvas#canvas[data-v]``
+        - ``filename``  — original ROM filename (canvas#canvas2)
         """
         url = f"{BASE_URL}/vault/{game_id}"
         soup = self._get(url)
 
-        # 1. Ekstrak array `media` dari tag script
+        # 1. Extract the `media` array from a script tag
         media = []
         for script in soup.select("script"):
             script_text = script.string or script.text or ""
@@ -174,7 +174,7 @@ class VimmScraper:
                         pass
                 break
 
-        # 2. Ekstrak opsi format yang tersedia
+        # 2. Extract the available format options
         formats = []
         for opt in soup.select("select#dl_format option"):
             formats.append({
@@ -183,12 +183,12 @@ class VimmScraper:
                 "title": opt.get("title", ""),
             })
 
-        # 3. Ekstrak opsi versi yang tersedia
+        # 3. Extract the available version options
         versions = []
         for opt in soup.select("select#dl_version option"):
             versions.append(opt.get_text(strip=True))
 
-        # 4. Ekstrak domain mirror download (e.g. //dl2.vimm.net/ atau //dl3.vimm.net/)
+        # 4. Extract the download mirror domain (e.g. //dl2.vimm.net/ or //dl3.vimm.net/)
         form = soup.select_one("form#dl_form")
         download_host = "https://dl3.vimm.net/"
         if form:
@@ -200,7 +200,7 @@ class VimmScraper:
             elif action:
                 download_host = action
 
-        # mediaId default (hidden input)
+        # Default mediaId (hidden input)
         media_input = soup.select_one("input[name='mediaId']")
         default_media_id = int(media_input["value"]) if media_input else None
 

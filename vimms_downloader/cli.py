@@ -27,7 +27,7 @@ def cli() -> None:
     """🎮 Vimm's Lair Downloader — ROM/ISO downloader CLI.
 
     \b
-    Contoh alur kerja:
+    Example workflow:
       vimms list-systems
       vimms search "mario" -s NES
       vimms info 17874
@@ -41,16 +41,16 @@ def cli() -> None:
 
 @cli.command("list-systems")
 def cmd_list_systems() -> None:
-    """Tampilkan semua sistem yang tersedia di Vimm's Lair."""
-    table = Table(title="Sistem di Vimm's Lair", show_lines=False, expand=False)
-    table.add_column("Kode URL", style="cyan", no_wrap=True)
-    table.add_column("Nama Sistem", style="green")
+    """Show all systems available on Vimm's Lair."""
+    table = Table(title="Vimm's Lair Systems", show_lines=False, expand=False)
+    table.add_column("URL Code", style="cyan", no_wrap=True)
+    table.add_column("System Name", style="green")
 
     for code, name in sorted(SYSTEMS.items(), key=lambda x: x[1]):
         table.add_row(code, name)
 
     console.print(table)
-    console.print(f"[dim]Total: {len(SYSTEMS)} sistem[/dim]")
+    console.print(f"[dim]Total: {len(SYSTEMS)} systems[/dim]")
 
 
 # --------------------------------------------------------------------------
@@ -63,46 +63,46 @@ def cmd_list_systems() -> None:
     "--system", "-s",
     default=None,
     metavar="CODE",
-    help="Filter per kode sistem (NES, PS1, SNES, ...).",
+    help="Filter by system code (NES, PS1, SNES, ...).",
 )
 @click.option(
     "--limit", "-l",
     default=20,
     type=int,
     show_default=True,
-    help="Batas jumlah hasil yang ditampilkan.",
+    help="Limit the number of results shown.",
 )
 def cmd_search(query: str, system: Optional[str], limit: int) -> None:
-    """Cari game di vault.
+    """Search for games in the vault.
 
     \b
-    Contoh:
+    Examples:
       vimms search "mario"
       vimms search "zelda" -s N64 -l 10
     """
     try:
         with VimmScraper() as scraper:
-            with console.status(f"Mencari [bold]{query}[/bold]..."):
+            with console.status(f"Searching [bold]{query}[/bold]..."):
                 results = scraper.search(query, system=system)
     except httpx.HTTPError as e:
-        console.print(f"[red]❌  Gagal terhubung ke Vimm's Lair: {e}[/red]")
+        console.print(f"[red]❌  Failed to connect to Vimm's Lair: {e}[/red]")
         raise SystemExit(1)
     except Exception as e:
         console.print(f"[red]❌  Error: {e}[/red]")
         raise SystemExit(1)
 
     if not results:
-        console.print("[red]Tidak ada hasil ditemukan.[/red]")
+        console.print("[red]No results found.[/red]")
         return
 
     shown = results[:limit]
     table = Table(
-        title=f"Hasil pencarian: '[bold]{query}[/bold]'"
-              + (f" — sistem: {system}" if system else ""),
+        title=f"Search results: '[bold]{query}[/bold]'"
+              + (f" — system: {system}" if system else ""),
         show_lines=False,
     )
     table.add_column("ID", style="cyan", justify="right", no_wrap=True)
-    table.add_column("Judul", style="green")
+    table.add_column("Title", style="green")
     table.add_column("URL", style="dim")
 
     for r in shown:
@@ -111,8 +111,8 @@ def cmd_search(query: str, system: Optional[str], limit: int) -> None:
     console.print(table)
     if len(results) > limit:
         console.print(
-            f"[dim]Menampilkan {limit} dari {len(results)} hasil. "
-            f"Gunakan --limit untuk memperbanyak.[/dim]"
+            f"[dim]Showing {limit} of {len(results)} results. "
+            f"Use --limit to see more.[/dim]"
         )
 
 
@@ -126,20 +126,20 @@ def cmd_search(query: str, system: Optional[str], limit: int) -> None:
     "--letter", "-l",
     default=None,
     metavar="A-Z",
-    help="Filter berdasarkan huruf awal judul.",
+    help="Filter by the title's starting letter.",
 )
 @click.option(
     "--limit",
     default=50,
     type=int,
     show_default=True,
-    help="Batas jumlah baris yang ditampilkan.",
+    help="Limit the number of rows shown.",
 )
 def cmd_browse(system: str, letter: Optional[str], limit: int) -> None:
-    """Browse daftar game per sistem.
+    """Browse the game list for a system.
 
     \b
-    Contoh:
+    Examples:
       vimms browse SNES
       vimms browse NES -l M
       vimms browse PS1 --limit 100
@@ -151,20 +151,20 @@ def cmd_browse(system: str, letter: Optional[str], limit: int) -> None:
             with console.status(f"Browsing [bold]{label}[/bold]..."):
                 results = scraper.browse(system, letter=letter)
     except httpx.HTTPError as e:
-        console.print(f"[red]❌  Gagal terhubung ke Vimm's Lair: {e}[/red]")
+        console.print(f"[red]❌  Failed to connect to Vimm's Lair: {e}[/red]")
         raise SystemExit(1)
     except Exception as e:
         console.print(f"[red]❌  Error: {e}[/red]")
         raise SystemExit(1)
 
     if not results:
-        console.print("[red]Tidak ada game ditemukan.[/red]")
+        console.print("[red]No games found.[/red]")
         return
 
     shown = results[:limit]
     table = Table(title=f"Game List — {label}", show_lines=False)
     table.add_column("ID", style="cyan", justify="right", no_wrap=True)
-    table.add_column("Judul", style="green")
+    table.add_column("Title", style="green")
 
     for r in shown:
         table.add_row(str(r["game_id"]), r["title"])
@@ -172,8 +172,8 @@ def cmd_browse(system: str, letter: Optional[str], limit: int) -> None:
     console.print(table)
     if len(results) > limit:
         console.print(
-            f"[dim]Menampilkan {limit} dari {len(results)} game. "
-            f"Gunakan --limit untuk melihat lebih banyak.[/dim]"
+            f"[dim]Showing {limit} of {len(results)} games. "
+            f"Use --limit to see more.[/dim]"
         )
 
 
@@ -184,10 +184,10 @@ def cmd_browse(system: str, letter: Optional[str], limit: int) -> None:
 @cli.command("info")
 @click.argument("game_id", type=int)
 def cmd_info(game_id: int) -> None:
-    """Tampilkan detail satu game berdasarkan ID.
+    """Show details for a single game by ID.
 
     \b
-    Contoh:
+    Example:
       vimms info 17874
     """
     try:
@@ -195,14 +195,14 @@ def cmd_info(game_id: int) -> None:
             with console.status(f"Fetching game [bold]{game_id}[/bold]..."):
                 d = scraper.get_game_detail(game_id)
     except httpx.HTTPError as e:
-        console.print(f"[red]❌  Gagal terhubung ke Vimm's Lair: {e}[/red]")
+        console.print(f"[red]❌  Failed to connect to Vimm's Lair: {e}[/red]")
         raise SystemExit(1)
     except Exception as e:
         console.print(f"[red]❌  Error: {e}[/red]")
         raise SystemExit(1)
 
     if not d.get("title") and not d.get("media_id"):
-        console.print(f"[red]Game ID {game_id} tidak ditemukan.[/red]")
+        console.print(f"[red]Game ID {game_id} not found.[/red]")
         return
 
     # Header
@@ -219,12 +219,12 @@ def cmd_info(game_id: int) -> None:
     rows = [
         ("Game ID",  str(d["game_id"])),
         ("Media ID", str(d["media_id"]) if d.get("media_id") else "[red]N/A[/red]"),
-        ("Sistem",   d.get("system") or ""),
-        ("Tahun",    d.get("year") or ""),
-        ("Pemain",   d.get("players") or ""),
-        ("Ukuran",   d.get("file_size") or ""),
+        ("System",   d.get("system") or ""),
+        ("Year",     d.get("year") or ""),
+        ("Players",  d.get("players") or ""),
+        ("Size",     d.get("file_size") or ""),
         ("Format",   fmt_str),
-        ("Versi",    ver_str),
+        ("Version",  ver_str),
         ("URL",      d["url"]),
     ]
     for label, val in rows:
@@ -238,9 +238,9 @@ def cmd_info(game_id: int) -> None:
             cmd_suggest += f" --version {d['versions'][-1]}"
         if d.get("formats"):
             cmd_suggest += f" --format {d['formats'][0]['name'].replace('.', '')}"
-        console.print(f"[dim]Untuk download: [bold]{cmd_suggest}[/bold][/dim]")
+        console.print(f"[dim]To download: [bold]{cmd_suggest}[/bold][/dim]")
     else:
-        console.print("[yellow]⚠  Download tidak tersedia untuk game ini.[/yellow]")
+        console.print("[yellow]⚠  Download not available for this game.[/yellow]")
 
 
 # --------------------------------------------------------------------------
@@ -252,18 +252,18 @@ def cmd_info(game_id: int) -> None:
 @click.option(
     "--format", "-f",
     default=None,
-    help="Format disk/ROM yang diinginkan (e.g. wbfs, rvz, iso).",
+    help="Desired disk/ROM format (e.g. wbfs, rvz, iso).",
 )
 @click.option(
     "--version", "-v",
     default=None,
-    help="Versi game yang diinginkan (e.g. 1.0, 1.1, 1.2).",
+    help="Desired game version (e.g. 1.0, 1.1, 1.2).",
 )
 @click.option(
     "--output-dir", "-o",
     default=None,
     metavar="PATH",
-    help="Override direktori output (default dari DOWNLOAD_DIR di config/.env).",
+    help="Override the output directory (defaults to DOWNLOAD_DIR from config/.env).",
 )
 def cmd_download(
     game_id: int,
@@ -271,35 +271,35 @@ def cmd_download(
     version: Optional[str],
     output_dir: Optional[str],
 ) -> None:
-    """Download ROM/ISO berdasarkan game ID.
+    """Download a ROM/ISO by game ID.
 
     \b
-    File disimpan di: DOWNLOAD_DIR/<SISTEM>/<judul>/
-    Contoh:
+    File is saved to: DOWNLOAD_DIR/<SYSTEM>/<title>/
+    Example:
       vimms download 17874 --format rvz --version 1.2
     """
     base_dir = Path(output_dir).expanduser() if output_dir else config.download_dir
 
-    # --- Ambil detail game ---
+    # --- Fetch game details ---
     try:
         with VimmScraper() as scraper:
-            with console.status(f"Fetching detail game [bold]{game_id}[/bold]..."):
+            with console.status(f"Fetching details for game [bold]{game_id}[/bold]..."):
                 detail = scraper.get_game_detail(game_id)
     except httpx.HTTPError as e:
-        console.print(f"[red]❌  Gagal terhubung ke Vimm's Lair: {e}[/red]")
+        console.print(f"[red]❌  Failed to connect to Vimm's Lair: {e}[/red]")
         raise SystemExit(1)
     except Exception as e:
-        console.print(f"[red]❌  Error fetching detail: {e}[/red]")
+        console.print(f"[red]❌  Error fetching details: {e}[/red]")
         raise SystemExit(1)
 
     if not detail.get("media_id"):
         console.print(
-            f"[red]❌  mediaId tidak ditemukan untuk game {game_id}. "
-            f"Download tidak tersedia.[/red]"
+            f"[red]❌  No mediaId found for game {game_id}. "
+            f"Download not available.[/red]"
         )
         return
 
-    # --- Tentukan mediaId berdasarkan versi ---
+    # --- Determine mediaId based on version ---
     media_list = detail.get("media_list", [])
     target_media = None
 
@@ -310,11 +310,11 @@ def cmd_download(
                 break
         if not target_media:
             avail_ver = ", ".join(detail.get("versions", []))
-            console.print(f"[red]❌  Versi '{version}' tidak ditemukan. Opsi tersedia: {avail_ver}[/red]")
+            console.print(f"[red]❌  Version '{version}' not found. Available options: {avail_ver}[/red]")
             return
 
     if not target_media:
-        # Cari record mediaId default
+        # Look up the default mediaId record
         for m in media_list:
             if m.get("ID") == detail["media_id"]:
                 target_media = m
@@ -325,7 +325,7 @@ def cmd_download(
     media_id = target_media["ID"]
     actual_version = target_media.get("Version", "Default")
 
-    # --- Tentukan format (alt parameter) ---
+    # --- Determine format (alt parameter) ---
     alt = 0
     formats = detail.get("formats", [])
     selected_format_name = "Default"
@@ -339,7 +339,7 @@ def cmd_download(
                 break
         else:
             avail_fmt = ", ".join([f["name"] for f in formats])
-            console.print(f"[red]❌  Format '{format}' tidak ditemukan. Opsi tersedia: {avail_fmt}[/red]")
+            console.print(f"[red]❌  Format '{format}' not found. Available options: {avail_fmt}[/red]")
             return
     elif formats:
         selected_format_name = formats[0]["name"]
@@ -349,17 +349,17 @@ def cmd_download(
     title = detail.get("title") or f"game_{game_id}"
     filename = detail.get("filename") or ""
 
-    # --- Tampilkan info sebelum download ---
+    # --- Show info before downloading ---
     console.print()
     console.print(f"[bold]🎮 {title}[/bold]")
-    console.print(f"  Sistem  : {system}")
-    console.print(f"  Versi   : {actual_version}")
+    console.print(f"  System  : {system}")
+    console.print(f"  Version : {actual_version}")
     console.print(f"  Format  : {selected_format_name}")
     console.print(f"  Media ID: {media_id}")
     console.print(f"  Output  : {base_dir / system / title}/")
     console.print()
 
-    # --- Jalankan download ---
+    # --- Run the download ---
     try:
         cfg = Config(download_dir=base_dir) if output_dir else None
         out_path = download_game(
@@ -372,9 +372,9 @@ def cmd_download(
             filename=filename,
             config=cfg,
         )
-        console.print(f"\n[bold green]✅  Download selesai:[/bold green] {out_path}")
+        console.print(f"\n[bold green]✅  Download complete:[/bold green] {out_path}")
     except subprocess.CalledProcessError as e:
-        console.print(f"[red]❌  Proses download gagal (exit code {e.returncode}).[/red]")
+        console.print(f"[red]❌  Download process failed (exit code {e.returncode}).[/red]")
         raise SystemExit(1)
     except Exception as e:
         console.print(f"[red]❌  Error: {e}[/red]")
