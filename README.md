@@ -7,7 +7,7 @@ CLI downloader for ROMs/ISOs from [Vimm's Lair](https://vimm.net/vault/) — sup
 ## 🚀 Key Features
 
 - **Native Nix Package & Cross-Platform**: Ready to run via `nix run`, `nix build`, or `pip`/`pipx`/`uv` on Linux, macOS, and Windows.
-- **aria2c-powered downloads**: Resume support plus automatic retry with increasing backoff when Vimm's Lair returns HTTP 503 (its single-connection-per-IP rate limit).
+- **aria2c-powered downloads**: Resume support plus automatic retry with increasing backoff on any failed attempt — connection errors, timeouts, or HTTP error responses (e.g. Vimm's Lair's single-connection-per-IP rate limit).
 - **Centralized Configuration**: Flexible `.env` settings (`DOWNLOAD_DIR`, `HTTP_TIMEOUT`, `ARIA2_CONNECTIONS`).
 - **Rich CLI Interface**: Interactive tables and download progress indicators.
 
@@ -185,6 +185,7 @@ vimms download <game_id> --version 1.2 --format wbfs
        │  └─ Extract the download mirror domain (dl2.vimm.net, dl3.vimm.net)
        │
        └─ download_game(): aria2c --continue=true
-              └─ On HTTP 503 (rate limited): retry with increasing delay
-                 (5s, 10s, 20s, ...), up to 5 attempts, resuming via -c each time
+              └─ On any failure (connection error, timeout, HTTP error, ...):
+                 retry with increasing delay (5s, 10s, 20s, ...), up to
+                 5 attempts, resuming via -c each time
 ```

@@ -1,16 +1,14 @@
 """
 Downloader module for Vimm's Lair — aria2c only.
 
-Vimm's Lair enforces a single connection per IP and returns HTTP 503 when a
-download is attempted too soon after a previous one. Failed downloads are
-retried with an increasing delay (doubling each time) whenever a 503 is
-detected in aria2c's log.
+Vimm's Lair enforces a single connection per IP and can intermittently
+fail requests (e.g. HTTP 503) when a download is attempted too soon after
+a previous one. Any failed attempt is retried with an increasing delay.
 """
 
 import re
 import shutil
 import subprocess
-import tempfile
 import time
 from pathlib import Path
 
@@ -20,7 +18,7 @@ from vimms_downloader.config import Config, get_config
 DOWNLOAD_DIR = get_config().download_dir
 
 ARIA2_MAX_RETRIES = 5
-ARIA2_RETRY_BASE_DELAY = 5  # seconds; doubles after each 503 retry
+ARIA2_RETRY_BASE_DELAY = 5  # seconds; doubles after each retry
 
 
 # --------------------------------------------------------------------------
@@ -46,18 +44,6 @@ def build_output_dir(system: str, title: str, base: Path | None = None) -> Path:
 # aria2c
 # --------------------------------------------------------------------------
 
-def _run_aria2c(cmd: list[str], log_path: Path) -> tuple[int, str]:
-    """
-    Run aria2c, inheriting the parent's stdio so its live progress display
-    still works normally, and return its exit code plus the contents of its
-    log file (used to detect HTTP 503 responses for retry purposes).
-    """
-    log_path.unlink(missing_ok=True)
-    result = subprocess.run(cmd)
-    log_text = log_path.read_text(errors="replace") if log_path.exists() else ""
-    return result.returncode, log_text
-
-
 def download_game(
     download_host: str,
     media_id: int,
@@ -71,11 +57,11 @@ def download_game(
     """
     Download a ROM/ISO from Vimm's Lair using aria2c.
 
-    Retries with an increasing delay (doubling on each retry, up to
-    ARIA2_MAX_RETRIES attempts) whenever aria2c reports an HTTP 503 from the
-    mirror — Vimm's Lair only allows one connection per IP and briefly
-    rejects requests made too soon after a prior download. `--continue=true`
-    means each retry resumes the partial file rather than restarting it.
+    Any failed attempt (non-zero exit code — timeouts, connection resets,
+    HTTP 5xx/4xx responses, etc.) is retried with an increasing delay
+    (doubling on each retry, up to ARIA2_MAX_RETRIES attempts).
+    `--continue=true` means each retry resumes the partial file rather than
+    restarting it.
 
     :param download_host: Base download URL host.
     :param media_id: Target media ID.
@@ -100,7 +86,6 @@ def download_game(
         url += f"&alt={alt}"
     referer = f"https://vimm.net/vault/{game_id}"
 
-    log_path = Path(tempfile.gettempdir()) / f"vimms-aria2c-{media_id}.log"
     cmd = [
         "aria2c",
         "--continue=true",
@@ -110,26 +95,21 @@ def download_game(
         "--auto-file-renaming=false",
         f"--referer={referer}",
         f"--user-agent={cfg.user_agent}",
-        f"--log={log_path}",
-        "--log-level=notice",
         url,
     ]
 
     delay = ARIA2_RETRY_BASE_DELAY
-    try:
-        for attempt in range(1, ARIA2_MAX_RETRIES + 1):
-            returncode, log_text = _run_aria2c(cmd, log_path)
-            if returncode == 0:
-                return out_dir
+    for attempt in range(1, ARIA2_MAX_RETRIES + 1):
+        result = subprocess.run(cmd)
+        if result.returncode == 0:
+            return out_dir
 
-            if "status=503" not in log_text or attempt == ARIA2_MAX_RETRIES:
-                raise subprocess.CalledProcessError(returncode, cmd, output=log_text)
+        if attempt == ARIA2_MAX_RETRIES:
+            raise subprocess.CalledProcessError(result.returncode, cmd)
 
-            print(
-                f"\n⚠  Vimm's Lair returned HTTP 503 (rate limited), "
-                f"retrying in {delay}s (attempt {attempt}/{ARIA2_MAX_RETRIES})...\n"
-            )
-            time.sleep(delay)
-            delay *= 2
-    finally:
-        log_path.unlink(missing_ok=True)
+        print(
+            f"\n⚠  Download failed (aria2c exit code {result.returncode}), "
+            f"retrying in {delay}s (attempt {attempt}/{ARIA2_MAX_RETRIES})...\n"
+        )
+        time.sleep(delay)
+        delay *= 2
