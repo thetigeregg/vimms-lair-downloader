@@ -116,6 +116,10 @@ vimms download 17874 --version 1.2 --format wbfs
 
 # Download to a custom location
 vimms download 834 -o /mnt/storage/roms
+
+# Queue multiple downloads (Vimm only allows 1 connection at a time), always
+# grabbing the newest version of each, with a 5s pause between downloads
+vimms download 17874 8342 12345 --latest --format wbfs --wait 5
 ```
 
 ---

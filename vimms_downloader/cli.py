@@ -1,6 +1,7 @@
 """CLI entry point — Vimm's Lair Downloader."""
 
 import subprocess
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -31,7 +32,7 @@ def cli() -> None:
       vimms list-systems
       vimms search "mario" -s NES
       vimms info 17874
-      vimms download 17874 --format rvz --latest
+      vimms download 17874 8342 12345 --latest --wait 5
     """
 
 
@@ -247,68 +248,33 @@ def cmd_info(game_id: int) -> None:
 # download
 # --------------------------------------------------------------------------
 
-@cli.command("download")
-@click.argument("game_id", type=int)
-@click.option(
-    "--format", "-f",
-    default=None,
-    help="Desired disk/ROM format (e.g. wbfs, rvz, iso).",
-)
-@click.option(
-    "--version", "-v",
-    default=None,
-    help="Desired game version (e.g. 1.0, 1.1, 1.2).",
-)
-@click.option(
-    "--latest", "-L",
-    is_flag=True,
-    default=False,
-    help="Always select the newest available version (ignores --version).",
-)
-@click.option(
-    "--output-dir", "-o",
-    default=None,
-    metavar="PATH",
-    help="Override the output directory (defaults to DOWNLOAD_DIR from config/.env).",
-)
-def cmd_download(
+def _download_one(
+    scraper: VimmScraper,
     game_id: int,
     format: Optional[str],
     version: Optional[str],
     latest: bool,
+    base_dir: Path,
     output_dir: Optional[str],
-) -> None:
-    """Download a ROM/ISO by game ID.
-
-    \b
-    File is saved to: DOWNLOAD_DIR/<SYSTEM>/<title>/
-    Example:
-      vimms download 17874 --format rvz --latest
-    """
-    if latest and version:
-        console.print("[red]❌  --latest and --version are mutually exclusive.[/red]")
-        raise SystemExit(1)
-
-    base_dir = Path(output_dir).expanduser() if output_dir else config.download_dir
-
+) -> bool:
+    """Download a single game. Returns True on success, False on failure."""
     # --- Fetch game details ---
     try:
-        with VimmScraper() as scraper:
-            with console.status(f"Fetching details for game [bold]{game_id}[/bold]..."):
-                detail = scraper.get_game_detail(game_id)
+        with console.status(f"Fetching details for game [bold]{game_id}[/bold]..."):
+            detail = scraper.get_game_detail(game_id)
     except httpx.HTTPError as e:
         console.print(f"[red]❌  Failed to connect to Vimm's Lair: {e}[/red]")
-        raise SystemExit(1)
+        return False
     except Exception as e:
         console.print(f"[red]❌  Error fetching details: {e}[/red]")
-        raise SystemExit(1)
+        return False
 
     if not detail.get("media_id"):
         console.print(
             f"[red]❌  No mediaId found for game {game_id}. "
             f"Download not available.[/red]"
         )
-        return
+        return False
 
     # --- Determine mediaId based on version ---
     media_list = detail.get("media_list", [])
@@ -322,7 +288,7 @@ def cmd_download(
         if not target_media:
             avail_ver = ", ".join(detail.get("versions", []))
             console.print(f"[red]❌  Version '{version}' not found. Available options: {avail_ver}[/red]")
-            return
+            return False
 
     if latest and detail.get("versions"):
         newest_version = detail["versions"][-1]
@@ -358,7 +324,7 @@ def cmd_download(
         else:
             avail_fmt = ", ".join([f["name"] for f in formats])
             console.print(f"[red]❌  Format '{format}' not found. Available options: {avail_fmt}[/red]")
-            return
+            return False
     elif formats:
         selected_format_name = formats[0]["name"]
         alt = formats[0]["value"]
@@ -391,11 +357,89 @@ def cmd_download(
             config=cfg,
         )
         console.print(f"\n[bold green]✅  Download complete:[/bold green] {out_path}")
+        return True
     except subprocess.CalledProcessError as e:
         console.print(f"[red]❌  Download process failed (exit code {e.returncode}).[/red]")
-        raise SystemExit(1)
+        return False
     except Exception as e:
         console.print(f"[red]❌  Error: {e}[/red]")
+        return False
+
+
+@cli.command("download")
+@click.argument("game_ids", type=int, nargs=-1, required=True)
+@click.option(
+    "--format", "-f",
+    default=None,
+    help="Desired disk/ROM format (e.g. wbfs, rvz, iso).",
+)
+@click.option(
+    "--version", "-v",
+    default=None,
+    help="Desired game version (e.g. 1.0, 1.1, 1.2). Only valid for a single game ID.",
+)
+@click.option(
+    "--latest", "-L",
+    is_flag=True,
+    default=False,
+    help="Always select the newest available version (ignores --version).",
+)
+@click.option(
+    "--wait", "-w",
+    default=0,
+    type=int,
+    show_default=True,
+    help="Seconds to wait between downloads when queuing multiple IDs.",
+)
+@click.option(
+    "--output-dir", "-o",
+    default=None,
+    metavar="PATH",
+    help="Override the output directory (defaults to DOWNLOAD_DIR from config/.env).",
+)
+def cmd_download(
+    game_ids: tuple[int, ...],
+    format: Optional[str],
+    version: Optional[str],
+    latest: bool,
+    wait: int,
+    output_dir: Optional[str],
+) -> None:
+    """Download one or more ROMs/ISOs by game ID.
+
+    \b
+    File is saved to: DOWNLOAD_DIR/<SYSTEM>/<title>/
+    Examples:
+      vimms download 17874 --format rvz --latest
+      vimms download 17874 8342 12345 --latest --wait 5
+    """
+    if latest and version:
+        console.print("[red]❌  --latest and --version are mutually exclusive.[/red]")
+        raise SystemExit(1)
+
+    if version and len(game_ids) > 1:
+        console.print(
+            "[red]❌  --version can't be used with multiple game IDs — each game has "
+            "its own version numbering. Use --latest instead, or download one ID at a time.[/red]"
+        )
+        raise SystemExit(1)
+
+    base_dir = Path(output_dir).expanduser() if output_dir else config.download_dir
+
+    with VimmScraper() as scraper:
+        results = []
+        for i, game_id in enumerate(game_ids):
+            if i > 0 and wait > 0:
+                time.sleep(wait)
+            results.append(
+                _download_one(scraper, game_id, format, version, latest, base_dir, output_dir)
+            )
+
+    if len(game_ids) > 1:
+        succeeded = sum(results)
+        console.print(f"\n[bold]Queue complete:[/bold] {succeeded}/{len(game_ids)} succeeded.")
+
+    if not all(results):
         raise SystemExit(1)
 
 
