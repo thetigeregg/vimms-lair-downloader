@@ -1,7 +1,6 @@
 services:
   vimms:
     image: vimm:latest
-    build: .
     pull_policy: never
     container_name: vimms-lair-downloader
     # Match your DSM user's uid:gid so downloaded files aren't owned by root

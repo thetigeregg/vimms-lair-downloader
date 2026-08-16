@@ -148,12 +148,18 @@ Run `vimms` via Docker/Container Manager on a Synology NAS (e.g. DS920+), with `
     - /volume1/downloads/roms:/roms
   ```
 
-#### 3. Run
-Over SSH:
+#### 3. Build and run
+`docker-compose.yml` only runs the `vimm:latest` image — it does not build it. Build it once first:
 ```bash
-docker compose up -d --build
+docker build -t vimm:latest .
 ```
-Or import `docker-compose.yml` as a **Project** in **Container Manager** (DSM 7+).
+Then, over SSH:
+```bash
+docker compose up -d
+```
+Or import `docker-compose.yml` as a **Project** in **Container Manager** (DSM 7+), after building the image via the Container Manager **Image** tab.
+
+Whenever you update the source, rebuild the image (`docker build -t vimm:latest .`) and recreate the container (`docker compose up -d`).
 
 The container stays idle (`sleep infinity`); run `vimms` commands via `docker exec`:
 ```bash
