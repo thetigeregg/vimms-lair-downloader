@@ -438,6 +438,9 @@ def cmd_download(
     if len(game_ids) > 1:
         succeeded = sum(results)
         console.print(f"\n[bold]Queue complete:[/bold] {succeeded}/{len(game_ids)} succeeded.")
+        failed_ids = [gid for gid, ok in zip(game_ids, results) if not ok]
+        if failed_ids:
+            console.print(f"[red]Failed IDs:[/red] {' '.join(str(gid) for gid in failed_ids)}")
 
     if not all(results):
         raise SystemExit(1)

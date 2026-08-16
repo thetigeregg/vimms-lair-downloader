@@ -7,7 +7,7 @@ CLI downloader for ROMs/ISOs from [Vimm's Lair](https://vimm.net/vault/) — sup
 ## 🚀 Key Features
 
 - **Native Nix Package & Cross-Platform**: Ready to run via `nix run`, `nix build`, or `pip`/`pipx`/`uv` on Linux, macOS, and Windows.
-- **Downloader Strategy Pattern**: Automatic fallback order `aria2c` (multi-connection & resume) → `wget` → `httpx` streaming (pure Python).
+- **aria2c-powered downloads**: Resume support plus automatic retry with increasing backoff when Vimm's Lair returns HTTP 503 (its single-connection-per-IP rate limit).
 - **Centralized Configuration**: Flexible `.env` settings (`DOWNLOAD_DIR`, `HTTP_TIMEOUT`, `ARIA2_CONNECTIONS`).
 - **Rich CLI Interface**: Interactive tables and download progress indicators.
 
@@ -86,7 +86,7 @@ pip install .
   ```
 
 > 💡 **Non-Nix System Dependency Note**:
-> `vimms` works out of the box without any extra tools (falls back to Python `httpx`). To get the fastest multi-connection download support, you can install `aria2` on your OS:
+> `vimms` requires `aria2` to be installed for the `download` command to work — install it on your OS:
 > - **Ubuntu/Debian**: `sudo apt install aria2`
 > - **Arch Linux**: `sudo pacman -S aria2`
 > - **macOS**: `brew install aria2`
@@ -131,7 +131,6 @@ vimms download 17874 8342 12345 --latest --format wbfs --wait 5
 | `DOWNLOAD_DIR` | `~/roms` | Main output directory |
 | `ARIA2_CONNECTIONS` | `1` | Parallel `aria2c` connections (Vimm limits to 1 connection per IP) |
 | `HTTP_TIMEOUT` | `30` | HTTP connection timeout (seconds) |
-| `USE_WGET` | *(empty)* | Set to `1` to force the use of `wget` |
 
 ---
 
@@ -176,7 +175,7 @@ Downloaded files will appear in the mounted DSM shared folder, owned by whatever
 
 ---
 
-## 🏗️ Downloader Strategy Architecture
+## 🏗️ Download Architecture
 
 ```
 vimms download <game_id> --version 1.2 --format wbfs
@@ -185,8 +184,7 @@ vimms download <game_id> --version 1.2 --format wbfs
        │  ├─ Extract mediaId from the JS `media` array
        │  └─ Extract the download mirror domain (dl2.vimm.net, dl3.vimm.net)
        │
-       └─ Download Strategy Fallback (download_game)
-              ├─ 1. Aria2Downloader (aria2c --continue=true)
-              ├─ 2. WgetDownloader  (wget -c --content-disposition)
-              └─ 3. HttpxDownloader (httpx GET streaming fallback)
+       └─ download_game(): aria2c --continue=true
+              └─ On HTTP 503 (rate limited): retry with increasing delay
+                 (5s, 10s, 20s, ...), up to 5 attempts, resuming via -c each time
 ```

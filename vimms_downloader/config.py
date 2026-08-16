@@ -29,9 +29,6 @@ class Config:
     aria2_connections: int = field(
         default_factory=lambda: int(os.getenv("ARIA2_CONNECTIONS", "1"))
     )
-    use_wget: bool = field(
-        default_factory=lambda: os.getenv("USE_WGET", "").strip().lower() in ("1", "true", "yes")
-    )
     user_agent: str = field(
         default_factory=lambda: os.getenv("USER_AGENT", DEFAULT_USER_AGENT)
     )
@@ -50,11 +47,6 @@ class Config:
     def ARIA2_CONNECTIONS(self) -> int:
         """Alias for backward compatibility with uppercase env var style."""
         return self.aria2_connections
-
-    @property
-    def USE_WGET(self) -> bool:
-        """Alias for backward compatibility with uppercase env var style."""
-        return self.use_wget
 
     @property
     def USER_AGENT(self) -> str:

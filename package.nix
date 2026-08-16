@@ -12,7 +12,6 @@
   anyio,
   socksio,
   aria2,
-  wget,
 }:
 
 buildPythonApplication {
@@ -40,12 +39,7 @@ buildPythonApplication {
 
   postInstall = ''
     wrapProgram $out/bin/vimms \
-      --prefix PATH : ${
-        lib.makeBinPath [
-          aria2
-          wget
-        ]
-      }
+      --prefix PATH : ${lib.makeBinPath [ aria2 ]}
   '';
 
   meta = with lib; {
