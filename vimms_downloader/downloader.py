@@ -125,19 +125,27 @@ def find_downloaded_archive(out_dir: Path) -> Path | None:
     return archives[0] if archives else None
 
 
-def extract_archive(archive_path: Path, remove_after: bool = False) -> Path:
+def extract_archive(archive_path: Path, remove_after: bool = False, capture_output: bool = False) -> Path:
     """
     Extract a .7z archive into its containing directory using the `7z` CLI.
 
     :param archive_path: Path to the .7z archive.
     :param remove_after: Delete the archive once extraction succeeds.
+    :param capture_output: Capture stdout/stderr instead of streaming it live
+        (for use when running alongside another live-streaming subprocess,
+        e.g. a concurrent aria2c download, to avoid interleaved terminal
+        output). Captured output is still attached to CalledProcessError on
+        failure.
     :return: The directory the archive was extracted into.
     """
     if shutil.which("7z") is None:
         raise RuntimeError("7z is not installed or not available on PATH.")
 
     out_dir = archive_path.parent
-    subprocess.run(["7z", "x", str(archive_path), f"-o{out_dir}", "-y"], check=True)
+    subprocess.run(
+        ["7z", "x", str(archive_path), f"-o{out_dir}", "-y"],
+        check=True, capture_output=capture_output, text=capture_output,
+    )
 
     if remove_after:
         archive_path.unlink()
@@ -155,20 +163,25 @@ def find_iso(out_dir: Path) -> Path | None:
     return isos[0] if isos else None
 
 
-def extract_xiso_contents(iso_path: Path, remove_after: bool = False) -> Path:
+def extract_xiso_contents(iso_path: Path, remove_after: bool = False, capture_output: bool = False) -> Path:
     """
     Run extract-xiso on an Xbox/Xbox 360 .iso, extracting it to a sibling
     directory (named after the .iso, minus its extension).
 
     :param iso_path: Path to the .iso.
     :param remove_after: Delete the .iso once extraction succeeds.
+    :param capture_output: Capture stdout/stderr instead of streaming it live
+        (see extract_archive() for why).
     :return: The directory the .iso was extracted into.
     """
     if shutil.which("extract-xiso") is None:
         raise RuntimeError("extract-xiso is not installed or not available on PATH.")
 
     out_dir = iso_path.parent / iso_path.stem
-    subprocess.run(["extract-xiso", "-x", "-d", str(out_dir), str(iso_path)], check=True)
+    subprocess.run(
+        ["extract-xiso", "-x", "-d", str(out_dir), str(iso_path)],
+        check=True, capture_output=capture_output, text=capture_output,
+    )
 
     if remove_after:
         iso_path.unlink()
@@ -180,13 +193,15 @@ def extract_xiso_contents(iso_path: Path, remove_after: bool = False) -> Path:
 # ZArchive (.zar packing for Xenia Canary/Edge)
 # --------------------------------------------------------------------------
 
-def pack_zarchive(source_dir: Path, remove_source: bool = False) -> Path:
+def pack_zarchive(source_dir: Path, remove_source: bool = False, capture_output: bool = False) -> Path:
     """
     Pack a directory (the extract-xiso output) into a .zar archive using the
     `zarchive` CLI — Xenia Canary/Edge's compressed Xbox 360 format.
 
     :param source_dir: Directory to pack (the extract-xiso output folder).
     :param remove_source: Delete source_dir once packing succeeds.
+    :param capture_output: Capture stdout/stderr instead of streaming it live
+        (see extract_archive() for why).
     :return: Path to the resulting .zar file.
     """
     if shutil.which("zarchive") is None:
@@ -195,7 +210,10 @@ def pack_zarchive(source_dir: Path, remove_source: bool = False) -> Path:
     output_file = source_dir.parent / f"{source_dir.name}.zar"
     if output_file.exists():
         output_file.unlink()  # zarchive refuses to run if the output already exists
-    subprocess.run(["zarchive", str(source_dir), str(output_file)], check=True)
+    subprocess.run(
+        ["zarchive", str(source_dir), str(output_file)],
+        check=True, capture_output=capture_output, text=capture_output,
+    )
 
     if remove_source:
         shutil.rmtree(source_dir)

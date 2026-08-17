@@ -226,3 +226,12 @@ vimms download <game_id> --version 1.2 --format wbfs
                      └─ --zar: zarchive → the extracted folder
                             (zstd-compressed .zar, smaller than the raw .iso)
 ```
+
+### Pipelined downloads + post-processing
+
+When queuing more than one game ID with any post-processing flag (`--extract`, `--extract-xiso`, `--zar`), downloads and post-processing run in two independently-paced lanes instead of one item's full pipeline blocking the next:
+
+- **Downloads** stay strictly sequential — one at a time, respecting `--wait` and Vimm's Lair's single-connection-per-IP limit.
+- **Post-processing** (7z/extract-xiso/zarchive) also stays strictly sequential — one item at a time, in the order downloads complete — but runs concurrently with the download lane.
+
+So item 2's download starts the moment item 1's download finishes, even if item 1 is still being extracted/converted/packed; if item 2 finishes downloading before item 1's post-processing is done, it just waits its turn. This kicks in automatically whenever it applies — no flag needed. A single ID, or a queue with no post-processing flags, is unaffected and behaves exactly as before.

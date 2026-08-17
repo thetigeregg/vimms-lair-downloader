@@ -2,6 +2,8 @@
 
 import subprocess
 import time
+from concurrent.futures import Future, ThreadPoolExecutor
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
@@ -255,7 +257,16 @@ def cmd_info(game_id: int) -> None:
 # download
 # --------------------------------------------------------------------------
 
-def _download_one(
+@dataclass
+class DownloadedItem:
+    """Info handed off from the download stage to the post-processing stage."""
+    game_id: int
+    system: str
+    title: str
+    base_dir: Path
+
+
+def _download_stage(
     scraper: VimmScraper,
     game_id: int,
     format: Optional[str],
@@ -263,31 +274,25 @@ def _download_one(
     latest: bool,
     base_dir: Path,
     output_dir: Optional[str],
-    extract: bool = False,
-    delete_archive: bool = False,
-    extract_xiso: bool = False,
-    delete_iso: bool = False,
-    zar: bool = False,
-    delete_xex_folder: bool = False,
-) -> bool:
-    """Download a single game. Returns True on success, False on failure."""
+) -> Optional[DownloadedItem]:
+    """Fetch details and run the aria2c download. Returns None on failure."""
     # --- Fetch game details ---
     try:
         with console.status(f"Fetching details for game [bold]{game_id}[/bold]..."):
             detail = scraper.get_game_detail(game_id)
     except httpx.HTTPError as e:
         console.print(f"[red]❌  Failed to connect to Vimm's Lair: {e}[/red]")
-        return False
+        return None
     except Exception as e:
         console.print(f"[red]❌  Error fetching details: {e}[/red]")
-        return False
+        return None
 
     if not detail.get("media_id"):
         console.print(
             f"[red]❌  No mediaId found for game {game_id}. "
             f"Download not available.[/red]"
         )
-        return False
+        return None
 
     # --- Determine mediaId based on version ---
     media_list = detail.get("media_list", [])
@@ -301,7 +306,7 @@ def _download_one(
         if not target_media:
             avail_ver = ", ".join(detail.get("versions", []))
             console.print(f"[red]❌  Version '{version}' not found. Available options: {avail_ver}[/red]")
-            return False
+            return None
 
     if latest and detail.get("versions"):
         newest_version = detail["versions"][-1]
@@ -337,7 +342,7 @@ def _download_one(
         else:
             avail_fmt = ", ".join([f["name"] for f in formats])
             console.print(f"[red]❌  Format '{format}' not found. Available options: {avail_fmt}[/red]")
-            return False
+            return None
     elif formats:
         selected_format_name = formats[0]["name"]
         alt = formats[0]["value"]
@@ -372,53 +377,78 @@ def _download_one(
         console.print(f"\n[bold green]✅  Download complete:[/bold green] {out_path}")
     except subprocess.CalledProcessError as e:
         console.print(f"[red]❌  Download process failed (exit code {e.returncode}).[/red]")
-        return False
+        return None
     except Exception as e:
         console.print(f"[red]❌  Error: {e}[/red]")
-        return False
+        return None
+
+    return DownloadedItem(game_id=game_id, system=system, title=title, base_dir=base_dir)
+
+
+def _postprocess_stage(
+    item: DownloadedItem,
+    extract: bool = False,
+    delete_archive: bool = False,
+    extract_xiso: bool = False,
+    delete_iso: bool = False,
+    zar: bool = False,
+    delete_xex_folder: bool = False,
+    pipelined: bool = False,
+) -> bool:
+    """
+    Run the extract/extract-xiso/zar chain for an already-downloaded game.
+    Returns True on success, False on failure.
+
+    :param pipelined: True when running concurrently with another item's
+        download in the pipelined queue — captures subprocess output instead
+        of streaming it live, to avoid interleaving with aria2c's live
+        progress display on the same terminal.
+    """
+    label = f"[dim][{item.game_id}][/dim] "
+    game_dir = item.base_dir / item.system / item.title
 
     if extract:
-        archive = find_downloaded_archive(base_dir / system / title)
+        archive = find_downloaded_archive(game_dir)
         if archive is None:
-            console.print("[yellow]⚠  --extract requested but no .7z archive was found.[/yellow]")
+            console.print(f"{label}[yellow]⚠  --extract requested but no .7z archive was found.[/yellow]")
             return False
         try:
-            with console.status(f"Extracting [bold]{archive.name}[/bold]..."):
-                extract_archive(archive, remove_after=delete_archive)
-            console.print(f"[bold green]✅  Extracted:[/bold green] {archive.parent}")
+            with console.status(f"{label}Extracting [bold]{archive.name}[/bold]..."):
+                extract_archive(archive, remove_after=delete_archive, capture_output=pipelined)
+            console.print(f"{label}[bold green]✅  Extracted:[/bold green] {archive.parent}")
         except subprocess.CalledProcessError as e:
-            console.print(f"[red]❌  Extraction failed (exit code {e.returncode}).[/red]")
+            console.print(f"{label}[red]❌  Extraction failed (exit code {e.returncode}).[/red]")
             return False
         except Exception as e:
-            console.print(f"[red]❌  Extraction error: {e}[/red]")
+            console.print(f"{label}[red]❌  Extraction error: {e}[/red]")
             return False
 
     if extract_xiso:
-        iso_path = find_iso(base_dir / system / title)
+        iso_path = find_iso(game_dir)
         if iso_path is None:
-            console.print("[yellow]⚠  --extract-xiso requested but no .iso file was found.[/yellow]")
+            console.print(f"{label}[yellow]⚠  --extract-xiso requested but no .iso file was found.[/yellow]")
             return False
         try:
-            with console.status(f"Running extract-xiso on [bold]{iso_path.name}[/bold]..."):
-                extracted_dir = extract_xiso_contents(iso_path, remove_after=delete_iso)
-            console.print(f"[bold green]✅  extract-xiso complete:[/bold green] {extracted_dir}")
+            with console.status(f"{label}Running extract-xiso on [bold]{iso_path.name}[/bold]..."):
+                extracted_dir = extract_xiso_contents(iso_path, remove_after=delete_iso, capture_output=pipelined)
+            console.print(f"{label}[bold green]✅  extract-xiso complete:[/bold green] {extracted_dir}")
         except subprocess.CalledProcessError as e:
-            console.print(f"[red]❌  extract-xiso failed (exit code {e.returncode}).[/red]")
+            console.print(f"{label}[red]❌  extract-xiso failed (exit code {e.returncode}).[/red]")
             return False
         except Exception as e:
-            console.print(f"[red]❌  extract-xiso error: {e}[/red]")
+            console.print(f"{label}[red]❌  extract-xiso error: {e}[/red]")
             return False
 
         if zar:
             try:
-                with console.status(f"Packing [bold]{extracted_dir.name}[/bold] into .zar..."):
-                    zar_path = pack_zarchive(extracted_dir, remove_source=delete_xex_folder)
-                console.print(f"[bold green]✅  Packed:[/bold green] {zar_path}")
+                with console.status(f"{label}Packing [bold]{extracted_dir.name}[/bold] into .zar..."):
+                    zar_path = pack_zarchive(extracted_dir, remove_source=delete_xex_folder, capture_output=pipelined)
+                console.print(f"{label}[bold green]✅  Packed:[/bold green] {zar_path}")
             except subprocess.CalledProcessError as e:
-                console.print(f"[red]❌  zarchive packing failed (exit code {e.returncode}).[/red]")
+                console.print(f"{label}[red]❌  zarchive packing failed (exit code {e.returncode}).[/red]")
                 return False
             except Exception as e:
-                console.print(f"[red]❌  zarchive error: {e}[/red]")
+                console.print(f"{label}[red]❌  zarchive error: {e}[/red]")
                 return False
 
     return True
@@ -547,19 +577,51 @@ def cmd_download(
 
     base_dir = Path(output_dir).expanduser() if output_dir else config.download_dir
 
+    # Post-processing (extract/extract-xiso/zar) is CPU/disk-bound, unlike the
+    # network-bound, rate-limited download step. When there's post-processing
+    # work and more than one ID, run downloads and post-processing in two
+    # independently-paced lanes: downloads stay strictly sequential (Vimm's
+    # single-connection limit + --wait), post-processing also stays strictly
+    # sequential (one item at a time, in download-completion order), but the
+    # two lanes run concurrently instead of blocking each other.
+    do_postprocess = extract
+    use_pipeline = do_postprocess and len(game_ids) > 1
+    results: list[bool] = [False] * len(game_ids)
+
     with VimmScraper() as scraper:
-        results = []
-        for i, game_id in enumerate(game_ids):
-            if i > 0 and wait > 0:
-                time.sleep(wait)
-            results.append(
-                _download_one(
-                    scraper, game_id, format, version, latest, base_dir, output_dir,
-                    extract=extract, delete_archive=delete_archive,
-                    extract_xiso=extract_xiso, delete_iso=delete_iso,
-                    zar=zar, delete_xex_folder=delete_xex_folder,
-                )
-            )
+        if not use_pipeline:
+            for i, game_id in enumerate(game_ids):
+                if i > 0 and wait > 0:
+                    time.sleep(wait)
+                item = _download_stage(scraper, game_id, format, version, latest, base_dir, output_dir)
+                ok = item is not None
+                if ok and do_postprocess:
+                    ok = _postprocess_stage(
+                        item, extract=extract, delete_archive=delete_archive,
+                        extract_xiso=extract_xiso, delete_iso=delete_iso,
+                        zar=zar, delete_xex_folder=delete_xex_folder, pipelined=False,
+                    )
+                results[i] = ok
+        else:
+            with ThreadPoolExecutor(max_workers=1) as post_executor:
+                futures: dict[int, "Future[bool]"] = {}
+                for i, game_id in enumerate(game_ids):
+                    if i > 0 and wait > 0:
+                        time.sleep(wait)
+                    item = _download_stage(scraper, game_id, format, version, latest, base_dir, output_dir)
+                    if item is None:
+                        results[i] = False
+                        continue
+                    futures[i] = post_executor.submit(
+                        _postprocess_stage, item, extract, delete_archive,
+                        extract_xiso, delete_iso, zar, delete_xex_folder, True,
+                    )
+                for i, future in futures.items():
+                    try:
+                        results[i] = future.result()
+                    except Exception as e:
+                        console.print(f"[red]❌  Post-processing error: {e}[/red]")
+                        results[i] = False
 
     if len(game_ids) > 1:
         succeeded = sum(results)
