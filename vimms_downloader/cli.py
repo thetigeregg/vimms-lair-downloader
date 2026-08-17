@@ -11,7 +11,7 @@ from rich.console import Console
 from rich.table import Table
 
 from vimms_downloader.config import Config, config
-from vimms_downloader.downloader import download_game
+from vimms_downloader.downloader import download_game, extract_archive, find_downloaded_archive
 from vimms_downloader.models import SYSTEMS
 from vimms_downloader.scraper import VimmScraper
 
@@ -256,6 +256,8 @@ def _download_one(
     latest: bool,
     base_dir: Path,
     output_dir: Optional[str],
+    extract: bool = False,
+    delete_archive: bool = False,
 ) -> bool:
     """Download a single game. Returns True on success, False on failure."""
     # --- Fetch game details ---
@@ -357,13 +359,30 @@ def _download_one(
             config=cfg,
         )
         console.print(f"\n[bold green]✅  Download complete:[/bold green] {out_path}")
-        return True
     except subprocess.CalledProcessError as e:
         console.print(f"[red]❌  Download process failed (exit code {e.returncode}).[/red]")
         return False
     except Exception as e:
         console.print(f"[red]❌  Error: {e}[/red]")
         return False
+
+    if extract:
+        archive = find_downloaded_archive(base_dir / system / title)
+        if archive is None:
+            console.print("[yellow]⚠  --extract requested but no .7z archive was found.[/yellow]")
+            return False
+        try:
+            with console.status(f"Extracting [bold]{archive.name}[/bold]..."):
+                extract_archive(archive, remove_after=delete_archive)
+            console.print(f"[bold green]✅  Extracted:[/bold green] {archive.parent}")
+        except subprocess.CalledProcessError as e:
+            console.print(f"[red]❌  Extraction failed (exit code {e.returncode}).[/red]")
+            return False
+        except Exception as e:
+            console.print(f"[red]❌  Extraction error: {e}[/red]")
+            return False
+
+    return True
 
 
 @cli.command("download")
@@ -392,6 +411,18 @@ def _download_one(
     help="Seconds to wait between downloads when queuing multiple IDs.",
 )
 @click.option(
+    "--extract", "-x",
+    is_flag=True,
+    default=False,
+    help="Extract the downloaded .7z archive after downloading.",
+)
+@click.option(
+    "--delete-archive",
+    is_flag=True,
+    default=False,
+    help="Delete the .7z archive after successful extraction (requires --extract).",
+)
+@click.option(
     "--output-dir", "-o",
     default=None,
     metavar="PATH",
@@ -403,6 +434,8 @@ def cmd_download(
     version: Optional[str],
     latest: bool,
     wait: int,
+    extract: bool,
+    delete_archive: bool,
     output_dir: Optional[str],
 ) -> None:
     """Download one or more ROMs/ISOs by game ID.
@@ -410,7 +443,7 @@ def cmd_download(
     \b
     File is saved to: DOWNLOAD_DIR/<SYSTEM>/<title>/
     Examples:
-      vimms download 17874 --format rvz --latest
+      vimms download 17874 --format rvz --latest --extract
       vimms download 17874 8342 12345 --latest --wait 5
     """
     if latest and version:
@@ -424,6 +457,10 @@ def cmd_download(
         )
         raise SystemExit(1)
 
+    if delete_archive and not extract:
+        console.print("[red]❌  --delete-archive requires --extract.[/red]")
+        raise SystemExit(1)
+
     base_dir = Path(output_dir).expanduser() if output_dir else config.download_dir
 
     with VimmScraper() as scraper:
@@ -432,7 +469,10 @@ def cmd_download(
             if i > 0 and wait > 0:
                 time.sleep(wait)
             results.append(
-                _download_one(scraper, game_id, format, version, latest, base_dir, output_dir)
+                _download_one(
+                    scraper, game_id, format, version, latest, base_dir, output_dir,
+                    extract=extract, delete_archive=delete_archive,
+                )
             )
 
     if len(game_ids) > 1:

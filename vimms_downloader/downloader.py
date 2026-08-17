@@ -113,3 +113,33 @@ def download_game(
         )
         time.sleep(delay)
         delay *= 2
+
+
+# --------------------------------------------------------------------------
+# 7z archive extraction
+# --------------------------------------------------------------------------
+
+def find_downloaded_archive(out_dir: Path) -> Path | None:
+    """Return the most recently modified .7z file in out_dir, if any."""
+    archives = sorted(out_dir.glob("*.7z"), key=lambda p: p.stat().st_mtime, reverse=True)
+    return archives[0] if archives else None
+
+
+def extract_archive(archive_path: Path, remove_after: bool = False) -> Path:
+    """
+    Extract a .7z archive into its containing directory using the `7z` CLI.
+
+    :param archive_path: Path to the .7z archive.
+    :param remove_after: Delete the archive once extraction succeeds.
+    :return: The directory the archive was extracted into.
+    """
+    if shutil.which("7z") is None:
+        raise RuntimeError("7z is not installed or not available on PATH.")
+
+    out_dir = archive_path.parent
+    subprocess.run(["7z", "x", str(archive_path), f"-o{out_dir}", "-y"], check=True)
+
+    if remove_after:
+        archive_path.unlink()
+
+    return out_dir

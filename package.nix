@@ -12,6 +12,7 @@
   anyio,
   socksio,
   aria2,
+  p7zip,
 }:
 
 buildPythonApplication {
@@ -39,7 +40,7 @@ buildPythonApplication {
 
   postInstall = ''
     wrapProgram $out/bin/vimms \
-      --prefix PATH : ${lib.makeBinPath [ aria2 ]}
+      --prefix PATH : ${lib.makeBinPath [ aria2 p7zip ]}
   '';
 
   meta = with lib; {

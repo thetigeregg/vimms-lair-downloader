@@ -91,6 +91,8 @@ pip install .
 > - **Arch Linux**: `sudo pacman -S aria2`
 > - **macOS**: `brew install aria2`
 > - **Windows**: `choco install aria2` or `scoop install aria2`
+>
+> Vimm's Lair always serves downloads as `.7z` archives. To use `--extract`, also install `7z` (`p7zip-full` on Debian/Ubuntu, `p7zip` on Arch/macOS Homebrew/Windows).
 
 ---
 
@@ -116,6 +118,12 @@ vimms download 17874 --version 1.2 --format wbfs
 
 # Download to a custom location
 vimms download 834 -o /mnt/storage/roms
+
+# Download and extract the .7z archive in place (kept alongside the extracted files)
+vimms download 17874 --latest --extract
+
+# Download, extract, and delete the .7z archive once extraction succeeds
+vimms download 17874 --latest --extract --delete-archive
 
 # Queue multiple downloads (Vimm only allows 1 connection at a time), always
 # grabbing the newest version of each, with a 5s pause between downloads
