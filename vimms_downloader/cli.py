@@ -20,6 +20,7 @@ from rich.table import Table
 
 from vimms_downloader.config import Config, config
 from vimms_downloader.downloader import (
+    build_output_dir,
     count_directory_files,
     count_xiso_files,
     download_game,
@@ -550,7 +551,7 @@ def _download_stage(
 
     reporter.download_info(
         game_id, title, system, actual_version, selected_format_name, media_id,
-        base_dir / system / title,
+        build_output_dir(system, title, base=base_dir),
     )
 
     # --- Run the download ---
@@ -591,7 +592,7 @@ def _postprocess_stage(
 ) -> bool:
     """Run the extract/extract-xiso/zar chain for an already-downloaded game.
     Returns True on success, False on failure."""
-    game_dir = item.base_dir / item.system / item.title
+    game_dir = build_output_dir(item.system, item.title, base=item.base_dir)
 
     if extract:
         archive = find_downloaded_archive(game_dir)
