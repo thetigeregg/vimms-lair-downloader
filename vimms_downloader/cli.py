@@ -773,7 +773,7 @@ def _run_tui(
         "--header", render_header_line(),
         "--bind", f"start,every(1):reload-sync:{render_status_cmd}",
         "--preview", "tail -n +1 -F {2}",
-        "--preview-window", "down,50%",
+        "--preview-window", "down,50%,follow",
     ]
     try:
         subprocess.run(fzf_cmd)
