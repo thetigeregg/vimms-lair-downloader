@@ -746,7 +746,9 @@ def _run_tui(
 
     active_phases = _active_phases(extract, extract_xiso, zar)
     for game_id in game_ids:
-        board.add_item(game_id, title=f"#{game_id}", log_path=log_dir / f"{game_id}.log", active_phases=active_phases)
+        item_log_path = log_dir / f"{game_id}.log"
+        item_log_path.touch()  # exists before fzf's preview (tail -F) ever runs
+        board.add_item(game_id, title=f"#{game_id}", log_path=item_log_path, active_phases=active_phases)
 
     results: list[bool] = []
 
@@ -772,7 +774,7 @@ def _run_tui(
         "--delimiter", "\t",
         "--header", header,
         "--bind", f"start,every(1):reload-sync:{render_status_cmd}",
-        "--preview", 'tail -n +1 -f "{2}"',
+        "--preview", 'tail -n +1 -F "{2}"',
         "--preview-window", "right,60%",
     ]
     try:
