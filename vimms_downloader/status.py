@@ -156,13 +156,21 @@ def _pad_ansi(styled: str, plain: str, width: int) -> str:
     return styled + (" " * pad)
 
 
-def render_header_line() -> str:
+def active_phase_names(item: ItemStatus) -> list[str]:
+    """Phases actually requested for this item's run (not 'skipped'), in PHASE_ORDER."""
+    return [name for name in PHASE_ORDER if item.phases[name].state != "skipped"]
+
+
+def render_header_line(active_phases: list[str]) -> str:
     """
     Header text for fzf's --header, column-aligned to match
-    render_table_lines()'s single visible field exactly.
+    render_table_lines()'s single visible field exactly. `active_phases`
+    should be the same list passed to StatusBoard.add_item() for this run —
+    phases nobody asked for (e.g. --zar with no --extract-xiso) aren't
+    shown as columns at all, rather than as a permanently "skipped" one.
     """
     columns = ["Title".ljust(TITLE_WIDTH)] + [
-        PHASE_LABELS[name].ljust(PHASE_WIDTH) for name in PHASE_ORDER
+        PHASE_LABELS[name].ljust(PHASE_WIDTH) for name in active_phases
     ]
     return COLUMN_GAP.join(columns)
 
@@ -171,18 +179,19 @@ def render_table_lines(items: list[ItemStatus]) -> list[str]:
     """
     Render fzf list lines: tab-separated `game_id`, `log_path` (both hidden
     from display via --with-nth), then a single pre-formatted visible field
-    (title + phase columns). Keeping the visible portion as one field —
-    rather than several tab-separated ones shown via `--with-nth N..` —
-    matters: fzf re-joins multiple `--with-nth`-selected fields using the
-    `--delimiter` itself (a literal tab here), which does not line up with
-    plain-space column padding the way render_header_line() is built, so
-    header and rows would drift out of alignment.
+    (title + phase columns, restricted to that item's active_phase_names()).
+    Keeping the visible portion as one field — rather than several
+    tab-separated ones shown via `--with-nth N..` — matters: fzf re-joins
+    multiple `--with-nth`-selected fields using the `--delimiter` itself (a
+    literal tab here), which does not line up with plain-space column
+    padding the way render_header_line() is built, so header and rows would
+    drift out of alignment.
     """
     lines = []
     for item in items:
         title_plain = item.title[:TITLE_WIDTH]
         columns = [title_plain.ljust(TITLE_WIDTH)]
-        for name in PHASE_ORDER:
+        for name in active_phase_names(item):
             phase = item.phases[name]
             plain = phase.cell_plain()[:PHASE_WIDTH]
             columns.append(_pad_ansi(phase.cell_ansi(), plain, PHASE_WIDTH))

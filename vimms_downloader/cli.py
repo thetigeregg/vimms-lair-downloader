@@ -770,7 +770,7 @@ def _run_tui(
         "--id-nth", "1",
         "--with-nth", "3",
         "--delimiter", "\t",
-        "--header", render_header_line(),
+        "--header", render_header_line(active_phases),
         "--bind", f"start,every(1):reload-sync:{render_status_cmd}",
         "--preview", "tail -n +1 -F {2}",
         "--preview-window", "down,50%,follow",
