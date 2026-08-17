@@ -23,6 +23,12 @@ PhaseState = Literal["pending", "running", "done", "failed", "skipped"]
 PHASE_ORDER = ["download", "7z", "extract-xiso", "zar"]
 PHASE_LABELS = {"download": "Download", "7z": "7z", "extract-xiso": "extract-xiso", "zar": "zar"}
 
+# Shared by render_table_lines() and render_header_line() so the header and
+# the data rows are guaranteed to use identical column widths.
+TITLE_WIDTH = 24
+PHASE_WIDTH = 14
+COLUMN_GAP = "  "
+
 _STATE_COLOR = {
     "pending": "dim",
     "running": "yellow",
@@ -150,20 +156,38 @@ def _pad_ansi(styled: str, plain: str, width: int) -> str:
     return styled + (" " * pad)
 
 
+def render_header_line() -> str:
+    """
+    Header text for fzf's --header, column-aligned to match
+    render_table_lines()'s single visible field exactly.
+    """
+    columns = ["Title".ljust(TITLE_WIDTH)] + [
+        PHASE_LABELS[name].ljust(PHASE_WIDTH) for name in PHASE_ORDER
+    ]
+    return COLUMN_GAP.join(columns)
+
+
 def render_table_lines(items: list[ItemStatus]) -> list[str]:
     """
     Render fzf list lines: tab-separated `game_id`, `log_path` (both hidden
-    from display via --with-nth), then the visible title + phase columns.
+    from display via --with-nth), then a single pre-formatted visible field
+    (title + phase columns). Keeping the visible portion as one field —
+    rather than several tab-separated ones shown via `--with-nth N..` —
+    matters: fzf re-joins multiple `--with-nth`-selected fields using the
+    `--delimiter` itself (a literal tab here), which does not line up with
+    plain-space column padding the way render_header_line() is built, so
+    header and rows would drift out of alignment.
     """
     lines = []
     for item in items:
-        title_plain = item.title[:30]
-        columns = [title_plain.ljust(30)]
+        title_plain = item.title[:TITLE_WIDTH]
+        columns = [title_plain.ljust(TITLE_WIDTH)]
         for name in PHASE_ORDER:
             phase = item.phases[name]
-            plain = phase.cell_plain()[:18]
-            columns.append(_pad_ansi(phase.cell_ansi(), plain, 18))
-        lines.append("\t".join([str(item.game_id), item.log_path, *columns]))
+            plain = phase.cell_plain()[:PHASE_WIDTH]
+            columns.append(_pad_ansi(phase.cell_ansi(), plain, PHASE_WIDTH))
+        visible = COLUMN_GAP.join(columns)
+        lines.append("\t".join([str(item.game_id), item.log_path, visible]))
     return lines
 
 

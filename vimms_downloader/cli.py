@@ -39,10 +39,9 @@ from vimms_downloader.progress_parsers import (
 )
 from vimms_downloader.scraper import VimmScraper
 from vimms_downloader.status import (
-    PHASE_LABELS,
-    PHASE_ORDER,
     StatusBoard,
     load_snapshot,
+    render_header_line,
     render_table_lines,
 )
 
@@ -763,19 +762,18 @@ def _run_tui(
     driver_thread = threading.Thread(target=_driver, daemon=False)
     driver_thread.start()
 
-    header = "Title".ljust(30) + "  " + "  ".join(PHASE_LABELS[p].ljust(18) for p in PHASE_ORDER)
     render_status_cmd = f"vimms _render-status {shlex.quote(str(status_path))}"
     fzf_cmd = [
         "fzf",
         "--ansi",
         "--track",
         "--id-nth", "1",
-        "--with-nth", "3..",
+        "--with-nth", "3",
         "--delimiter", "\t",
-        "--header", header,
+        "--header", render_header_line(),
         "--bind", f"start,every(1):reload-sync:{render_status_cmd}",
-        "--preview", 'tail -n +1 -F "{2}"',
-        "--preview-window", "right,60%",
+        "--preview", "tail -n +1 -F {2}",
+        "--preview-window", "down,50%",
     ]
     try:
         subprocess.run(fzf_cmd)
