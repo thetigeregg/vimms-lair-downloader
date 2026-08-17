@@ -8,6 +8,7 @@ CLI downloader for ROMs/ISOs from [Vimm's Lair](https://vimm.net/vault/) — sup
 
 - **Native Nix Package & Cross-Platform**: Ready to run via `nix run`, `nix build`, or `pip`/`pipx`/`uv` on Linux, macOS, and Windows.
 - **aria2c-powered downloads**: Resume support plus automatic retry with increasing backoff on any failed attempt — connection errors, timeouts, or HTTP error responses (e.g. Vimm's Lair's single-connection-per-IP rate limit).
+- **Live fzf download table**: One row per queued game, one column per phase, updating roughly once a second with real progress parsed from each tool — see [Live download table](#-live-download-table) below.
 - **Centralized Configuration**: Flexible `.env` settings (`DOWNLOAD_DIR`, `HTTP_TIMEOUT`, `ARIA2_CONNECTIONS`).
 - **Rich CLI Interface**: Interactive tables and download progress indicators.
 
@@ -97,6 +98,8 @@ pip install .
 > `--extract-xiso` (for Xbox/Xbox 360 games) needs the [`extract-xiso`](https://github.com/XboxDev/extract-xiso) binary on `PATH`. It isn't packaged for apt/Homebrew, so non-Nix/non-Docker users need to build it themselves (`cmake -S . -B build && cmake --build build`) and install the resulting binary. Docker and Nix builds already include it.
 >
 > `--zar` needs the [`zarchive`](https://github.com/Exzap/ZArchive) binary on `PATH` (also not packaged for apt/Homebrew — build it the same way, plus `libzstd` dev headers: `sudo apt install libzstd-dev` / `brew install zstd`). Docker and Nix builds already include it too.
+>
+> The live download table (below) requires [`fzf`](https://github.com/junegunn/fzf) ≥ 0.73.0 on `PATH` — install via `sudo apt install fzf` / `brew install fzf` / `scoop install fzf`, or grab a prebuilt binary from fzf's releases page. Docker and Nix builds already include it.
 
 ---
 
@@ -150,6 +153,17 @@ vimms download 15323 --latest --format xiso.iso \
 # grabbing the newest version of each, with a 5s pause between downloads
 vimms download 17874 8342 12345 --latest --format wbfs --wait 5
 ```
+
+---
+
+## 📺 Live download table
+
+Running `vimms download` in a real terminal (with `fzf` on `PATH`) replaces the plain scrolling output with a live table — one row per queued game, one column per phase (Download / 7z / extract-xiso / zar):
+
+- Rows update roughly once a second with real progress: aria2c's own `%`, 7z's per-file `%`, and for extract-xiso/zarchive (which don't report an overall `%` themselves) a percentage computed from a pre-flight file count against completed-file lines.
+- Move the cursor to a row (arrow keys / `j`/`k`) to see that item's full, clean log in the preview pane on the right — each phase's raw tool output, clearly separated, streaming live if that phase is still running.
+- Quitting the table (`Esc`/`q`/`Ctrl-C`) does **not** cancel anything in progress — downloads and post-processing keep running in the background and the usual "Queue complete" / "Failed IDs" summary prints once everything finishes.
+- This is automatic whenever possible — no flag needed. Non-interactive runs (piped output, scripts, `docker exec -T`) transparently fall back to the plain output described above; `fzf` not being installed is a hard error rather than a silent fallback, since it's a required dependency here (already bundled in the Docker image and Nix package).
 
 ---
 

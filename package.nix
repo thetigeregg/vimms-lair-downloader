@@ -15,6 +15,7 @@
   p7zip,
   extract-xiso,
   zarchive,
+  fzf,
 }:
 
 buildPythonApplication {
@@ -42,7 +43,7 @@ buildPythonApplication {
 
   postInstall = ''
     wrapProgram $out/bin/vimms \
-      --prefix PATH : ${lib.makeBinPath [ aria2 p7zip extract-xiso zarchive ]}
+      --prefix PATH : ${lib.makeBinPath [ aria2 p7zip extract-xiso zarchive fzf ]}
   '';
 
   meta = with lib; {

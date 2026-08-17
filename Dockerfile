@@ -21,13 +21,19 @@ RUN git clone --branch v0.1.2 --depth 1 https://github.com/Exzap/ZArchive.git /s
 
 FROM python:3.11-slim
 
+ARG TARGETARCH
+ARG FZF_VERSION=0.74.3
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         aria2 \
         p7zip-full \
         libzstd1 \
         ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+        curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -fsSL "https://github.com/junegunn/fzf/releases/download/v${FZF_VERSION}/fzf-${FZF_VERSION}-linux_${TARGETARCH}.tar.gz" \
+        | tar -xz -C /usr/local/bin fzf
 
 COPY --from=tools-builder /src/extract-xiso/build/extract-xiso /usr/local/bin/extract-xiso
 COPY --from=tools-builder /src/zarchive/build/zarchive /usr/local/bin/zarchive
