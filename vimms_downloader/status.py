@@ -103,7 +103,7 @@ class StatusBoard:
     """In-memory, thread-safe status for every item in the current queue."""
 
     def __init__(self, snapshot_path: Path) -> None:
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._items: dict[int, ItemStatus] = {}
         self._order: list[int] = []
         self.snapshot_path = snapshot_path
@@ -139,14 +139,23 @@ class StatusBoard:
             return [self._items[gid] for gid in self._order]
 
     def _write_snapshot(self) -> None:
-        # Called right after releasing/around the lock is fine here since we
-        # only ever call this right after a mutation on the same thread;
-        # snapshot() itself takes its own lock for the read.
-        items = self.snapshot()
-        payload = {"items": [item.to_dict() for item in items]}
-        tmp_path = self.snapshot_path.with_suffix(".tmp")
-        tmp_path.write_text(json.dumps(payload))
-        tmp_path.replace(self.snapshot_path)  # atomic on POSIX
+        # Locked end-to-end (not just the in-memory read that used to happen
+        # via snapshot()) because add_item()/update_phase()/set_title() call
+        # this right after releasing the lock, and there are two threads
+        # that can be doing so concurrently in the pipelined queue (the
+        # download lane and the single-worker post-processing lane).
+        # Without the lock, two overlapping writers using the same fixed
+        # .tmp path could race: one thread's os.replace() "steals" the
+        # other's .tmp file out from under it, raising ENOENT. The
+        # per-thread-ident suffix on tmp_path is a second, independent
+        # safety net against exactly that. (self._lock is an RLock as
+        # cheap insurance against any future nested acquisition here.)
+        with self._lock:
+            items = [self._items[gid] for gid in self._order]
+            payload = {"items": [item.to_dict() for item in items]}
+            tmp_path = self.snapshot_path.with_name(f"{self.snapshot_path.name}.{threading.get_ident()}.tmp")
+            tmp_path.write_text(json.dumps(payload))
+            tmp_path.replace(self.snapshot_path)  # atomic on POSIX
 
 
 def _pad_ansi(styled: str, plain: str, width: int) -> str:
