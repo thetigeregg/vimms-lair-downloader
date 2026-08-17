@@ -143,3 +143,34 @@ def extract_archive(archive_path: Path, remove_after: bool = False) -> Path:
         archive_path.unlink()
 
     return out_dir
+
+
+# --------------------------------------------------------------------------
+# extract-xiso (Xbox / Xbox 360 disc extraction)
+# --------------------------------------------------------------------------
+
+def find_iso(out_dir: Path) -> Path | None:
+    """Return the most recently modified .iso file under out_dir, if any."""
+    isos = sorted(out_dir.rglob("*.iso"), key=lambda p: p.stat().st_mtime, reverse=True)
+    return isos[0] if isos else None
+
+
+def extract_xiso_contents(iso_path: Path, remove_after: bool = False) -> Path:
+    """
+    Run extract-xiso on an Xbox/Xbox 360 .iso, extracting it to a sibling
+    directory (named after the .iso, minus its extension).
+
+    :param iso_path: Path to the .iso.
+    :param remove_after: Delete the .iso once extraction succeeds.
+    :return: The directory the .iso was extracted into.
+    """
+    if shutil.which("extract-xiso") is None:
+        raise RuntimeError("extract-xiso is not installed or not available on PATH.")
+
+    out_dir = iso_path.parent / iso_path.stem
+    subprocess.run(["extract-xiso", "-x", "-d", str(out_dir), str(iso_path)], check=True)
+
+    if remove_after:
+        iso_path.unlink()
+
+    return out_dir

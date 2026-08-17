@@ -93,6 +93,8 @@ pip install .
 > - **Windows**: `choco install aria2` or `scoop install aria2`
 >
 > Vimm's Lair always serves downloads as `.7z` archives. To use `--extract`, also install `7z` (`p7zip-full` on Debian/Ubuntu, `p7zip` on Arch/macOS Homebrew/Windows).
+>
+> `--extract-xiso` (for Xbox/Xbox 360 games) needs the [`extract-xiso`](https://github.com/XboxDev/extract-xiso) binary on `PATH`. It isn't packaged for apt/Homebrew, so non-Nix/non-Docker users need to build it themselves (`cmake -S . -B build && cmake --build build`) and install the resulting binary. Docker and Nix builds already include it.
 
 ---
 
@@ -124,6 +126,14 @@ vimms download 17874 --latest --extract
 
 # Download, extract, and delete the .7z archive once extraction succeeds
 vimms download 17874 --latest --extract --delete-archive
+
+# Xbox 360: unzip the .7z, then run extract-xiso on the resulting .iso to get
+# a folder (with default.xex etc.) ready for Xenia Canary/Edge
+vimms download 15323 --latest --format xiso.iso --extract --extract-xiso
+
+# Same, but also clean up the intermediate .7z and .iso, keeping only the
+# extracted folder
+vimms download 15323 --latest --format xiso.iso --extract --delete-archive --extract-xiso --delete-iso
 
 # Queue multiple downloads (Vimm only allows 1 connection at a time), always
 # grabbing the newest version of each, with a 5s pause between downloads
@@ -193,7 +203,12 @@ vimms download <game_id> --version 1.2 --format wbfs
        │  └─ Extract the download mirror domain (dl2.vimm.net, dl3.vimm.net)
        │
        └─ download_game(): aria2c --continue=true
-              └─ On any failure (connection error, timeout, HTTP error, ...):
-                 retry with increasing delay (5s, 10s, 20s, ...), up to
-                 5 attempts, resuming via -c each time
+              │  On any failure (connection error, timeout, HTTP error, ...):
+              │  retry with increasing delay (5s, 10s, 20s, ...), up to
+              │  5 attempts, resuming via -c each time
+              │
+              ├─ --extract: 7z x  → the game's .7z archive
+              │
+              └─ --extract-xiso: extract-xiso -x → the extracted .iso
+                     (Xbox/Xbox 360 only — exposes default.xex etc. for Xenia)
 ```

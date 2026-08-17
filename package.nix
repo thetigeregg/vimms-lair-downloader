@@ -13,6 +13,7 @@
   socksio,
   aria2,
   p7zip,
+  extract-xiso,
 }:
 
 buildPythonApplication {
@@ -40,7 +41,7 @@ buildPythonApplication {
 
   postInstall = ''
     wrapProgram $out/bin/vimms \
-      --prefix PATH : ${lib.makeBinPath [ aria2 p7zip ]}
+      --prefix PATH : ${lib.makeBinPath [ aria2 p7zip extract-xiso ]}
   '';
 
   meta = with lib; {

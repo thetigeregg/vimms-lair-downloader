@@ -11,7 +11,13 @@ from rich.console import Console
 from rich.table import Table
 
 from vimms_downloader.config import Config, config
-from vimms_downloader.downloader import download_game, extract_archive, find_downloaded_archive
+from vimms_downloader.downloader import (
+    download_game,
+    extract_archive,
+    extract_xiso_contents,
+    find_downloaded_archive,
+    find_iso,
+)
 from vimms_downloader.models import SYSTEMS
 from vimms_downloader.scraper import VimmScraper
 
@@ -258,6 +264,8 @@ def _download_one(
     output_dir: Optional[str],
     extract: bool = False,
     delete_archive: bool = False,
+    extract_xiso: bool = False,
+    delete_iso: bool = False,
 ) -> bool:
     """Download a single game. Returns True on success, False on failure."""
     # --- Fetch game details ---
@@ -382,6 +390,22 @@ def _download_one(
             console.print(f"[red]❌  Extraction error: {e}[/red]")
             return False
 
+    if extract_xiso:
+        iso_path = find_iso(base_dir / system / title)
+        if iso_path is None:
+            console.print("[yellow]⚠  --extract-xiso requested but no .iso file was found.[/yellow]")
+            return False
+        try:
+            with console.status(f"Running extract-xiso on [bold]{iso_path.name}[/bold]..."):
+                extract_xiso_contents(iso_path, remove_after=delete_iso)
+            console.print(f"[bold green]✅  extract-xiso complete:[/bold green] {iso_path.parent / iso_path.stem}")
+        except subprocess.CalledProcessError as e:
+            console.print(f"[red]❌  extract-xiso failed (exit code {e.returncode}).[/red]")
+            return False
+        except Exception as e:
+            console.print(f"[red]❌  extract-xiso error: {e}[/red]")
+            return False
+
     return True
 
 
@@ -423,6 +447,18 @@ def _download_one(
     help="Delete the .7z archive after successful extraction (requires --extract).",
 )
 @click.option(
+    "--extract-xiso", "-X",
+    is_flag=True,
+    default=False,
+    help="Run extract-xiso on the extracted .iso, for Xbox/Xbox 360 games (requires --extract).",
+)
+@click.option(
+    "--delete-iso",
+    is_flag=True,
+    default=False,
+    help="Delete the .iso after successful extract-xiso extraction (requires --extract-xiso).",
+)
+@click.option(
     "--output-dir", "-o",
     default=None,
     metavar="PATH",
@@ -436,6 +472,8 @@ def cmd_download(
     wait: int,
     extract: bool,
     delete_archive: bool,
+    extract_xiso: bool,
+    delete_iso: bool,
     output_dir: Optional[str],
 ) -> None:
     """Download one or more ROMs/ISOs by game ID.
@@ -445,6 +483,7 @@ def cmd_download(
     Examples:
       vimms download 17874 --format rvz --latest --extract
       vimms download 17874 8342 12345 --latest --wait 5
+      vimms download 15323 --latest --format xiso.iso --extract --extract-xiso
     """
     if latest and version:
         console.print("[red]❌  --latest and --version are mutually exclusive.[/red]")
@@ -461,6 +500,14 @@ def cmd_download(
         console.print("[red]❌  --delete-archive requires --extract.[/red]")
         raise SystemExit(1)
 
+    if extract_xiso and not extract:
+        console.print("[red]❌  --extract-xiso requires --extract.[/red]")
+        raise SystemExit(1)
+
+    if delete_iso and not extract_xiso:
+        console.print("[red]❌  --delete-iso requires --extract-xiso.[/red]")
+        raise SystemExit(1)
+
     base_dir = Path(output_dir).expanduser() if output_dir else config.download_dir
 
     with VimmScraper() as scraper:
@@ -472,6 +519,7 @@ def cmd_download(
                 _download_one(
                     scraper, game_id, format, version, latest, base_dir, output_dir,
                     extract=extract, delete_archive=delete_archive,
+                    extract_xiso=extract_xiso, delete_iso=delete_iso,
                 )
             )
 
