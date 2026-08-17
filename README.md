@@ -95,6 +95,8 @@ pip install .
 > Vimm's Lair always serves downloads as `.7z` archives. To use `--extract`, also install `7z` (`p7zip-full` on Debian/Ubuntu, `p7zip` on Arch/macOS Homebrew/Windows).
 >
 > `--extract-xiso` (for Xbox/Xbox 360 games) needs the [`extract-xiso`](https://github.com/XboxDev/extract-xiso) binary on `PATH`. It isn't packaged for apt/Homebrew, so non-Nix/non-Docker users need to build it themselves (`cmake -S . -B build && cmake --build build`) and install the resulting binary. Docker and Nix builds already include it.
+>
+> `--zar` needs the [`zarchive`](https://github.com/Exzap/ZArchive) binary on `PATH` (also not packaged for apt/Homebrew — build it the same way, plus `libzstd` dev headers: `sudo apt install libzstd-dev` / `brew install zstd`). Docker and Nix builds already include it too.
 
 ---
 
@@ -134,6 +136,15 @@ vimms download 15323 --latest --format xiso.iso --extract --extract-xiso
 # Same, but also clean up the intermediate .7z and .iso, keeping only the
 # extracted folder
 vimms download 15323 --latest --format xiso.iso --extract --delete-archive --extract-xiso --delete-iso
+
+# Xbox 360, full pipeline: unzip, extract the xiso, then pack the result into
+# a .zar for Xenia Canary/Edge (smaller than the raw .iso, e.g. ~7.3GB -> ~4.8GB)
+vimms download 15323 --latest --format xiso.iso --extract --extract-xiso --zar
+
+# Same, but clean up every intermediate (.7z, .iso, extracted folder), keeping
+# only the final .zar
+vimms download 15323 --latest --format xiso.iso \
+  --extract --delete-archive --extract-xiso --delete-iso --zar --delete-xex-folder
 
 # Queue multiple downloads (Vimm only allows 1 connection at a time), always
 # grabbing the newest version of each, with a 5s pause between downloads
@@ -211,4 +222,7 @@ vimms download <game_id> --version 1.2 --format wbfs
               │
               └─ --extract-xiso: extract-xiso -x → the extracted .iso
                      (Xbox/Xbox 360 only — exposes default.xex etc. for Xenia)
+                     │
+                     └─ --zar: zarchive → the extracted folder
+                            (zstd-compressed .zar, smaller than the raw .iso)
 ```

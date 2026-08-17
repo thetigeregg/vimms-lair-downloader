@@ -17,6 +17,7 @@ from vimms_downloader.downloader import (
     extract_xiso_contents,
     find_downloaded_archive,
     find_iso,
+    pack_zarchive,
 )
 from vimms_downloader.models import SYSTEMS
 from vimms_downloader.scraper import VimmScraper
@@ -266,6 +267,8 @@ def _download_one(
     delete_archive: bool = False,
     extract_xiso: bool = False,
     delete_iso: bool = False,
+    zar: bool = False,
+    delete_xex_folder: bool = False,
 ) -> bool:
     """Download a single game. Returns True on success, False on failure."""
     # --- Fetch game details ---
@@ -397,14 +400,26 @@ def _download_one(
             return False
         try:
             with console.status(f"Running extract-xiso on [bold]{iso_path.name}[/bold]..."):
-                extract_xiso_contents(iso_path, remove_after=delete_iso)
-            console.print(f"[bold green]✅  extract-xiso complete:[/bold green] {iso_path.parent / iso_path.stem}")
+                extracted_dir = extract_xiso_contents(iso_path, remove_after=delete_iso)
+            console.print(f"[bold green]✅  extract-xiso complete:[/bold green] {extracted_dir}")
         except subprocess.CalledProcessError as e:
             console.print(f"[red]❌  extract-xiso failed (exit code {e.returncode}).[/red]")
             return False
         except Exception as e:
             console.print(f"[red]❌  extract-xiso error: {e}[/red]")
             return False
+
+        if zar:
+            try:
+                with console.status(f"Packing [bold]{extracted_dir.name}[/bold] into .zar..."):
+                    zar_path = pack_zarchive(extracted_dir, remove_source=delete_xex_folder)
+                console.print(f"[bold green]✅  Packed:[/bold green] {zar_path}")
+            except subprocess.CalledProcessError as e:
+                console.print(f"[red]❌  zarchive packing failed (exit code {e.returncode}).[/red]")
+                return False
+            except Exception as e:
+                console.print(f"[red]❌  zarchive error: {e}[/red]")
+                return False
 
     return True
 
@@ -459,6 +474,18 @@ def _download_one(
     help="Delete the .iso after successful extract-xiso extraction (requires --extract-xiso).",
 )
 @click.option(
+    "--zar", "-z",
+    is_flag=True,
+    default=False,
+    help="Pack the extract-xiso output into a .zar archive for Xenia (requires --extract-xiso).",
+)
+@click.option(
+    "--delete-xex-folder",
+    is_flag=True,
+    default=False,
+    help="Delete the extracted folder after successful .zar packing (requires --zar).",
+)
+@click.option(
     "--output-dir", "-o",
     default=None,
     metavar="PATH",
@@ -474,6 +501,8 @@ def cmd_download(
     delete_archive: bool,
     extract_xiso: bool,
     delete_iso: bool,
+    zar: bool,
+    delete_xex_folder: bool,
     output_dir: Optional[str],
 ) -> None:
     """Download one or more ROMs/ISOs by game ID.
@@ -483,7 +512,7 @@ def cmd_download(
     Examples:
       vimms download 17874 --format rvz --latest --extract
       vimms download 17874 8342 12345 --latest --wait 5
-      vimms download 15323 --latest --format xiso.iso --extract --extract-xiso
+      vimms download 15323 --latest --format xiso.iso --extract --extract-xiso --zar
     """
     if latest and version:
         console.print("[red]❌  --latest and --version are mutually exclusive.[/red]")
@@ -508,6 +537,14 @@ def cmd_download(
         console.print("[red]❌  --delete-iso requires --extract-xiso.[/red]")
         raise SystemExit(1)
 
+    if zar and not extract_xiso:
+        console.print("[red]❌  --zar requires --extract-xiso.[/red]")
+        raise SystemExit(1)
+
+    if delete_xex_folder and not zar:
+        console.print("[red]❌  --delete-xex-folder requires --zar.[/red]")
+        raise SystemExit(1)
+
     base_dir = Path(output_dir).expanduser() if output_dir else config.download_dir
 
     with VimmScraper() as scraper:
@@ -520,6 +557,7 @@ def cmd_download(
                     scraper, game_id, format, version, latest, base_dir, output_dir,
                     extract=extract, delete_archive=delete_archive,
                     extract_xiso=extract_xiso, delete_iso=delete_iso,
+                    zar=zar, delete_xex_folder=delete_xex_folder,
                 )
             )
 

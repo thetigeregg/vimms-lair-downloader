@@ -174,3 +174,30 @@ def extract_xiso_contents(iso_path: Path, remove_after: bool = False) -> Path:
         iso_path.unlink()
 
     return out_dir
+
+
+# --------------------------------------------------------------------------
+# ZArchive (.zar packing for Xenia Canary/Edge)
+# --------------------------------------------------------------------------
+
+def pack_zarchive(source_dir: Path, remove_source: bool = False) -> Path:
+    """
+    Pack a directory (the extract-xiso output) into a .zar archive using the
+    `zarchive` CLI — Xenia Canary/Edge's compressed Xbox 360 format.
+
+    :param source_dir: Directory to pack (the extract-xiso output folder).
+    :param remove_source: Delete source_dir once packing succeeds.
+    :return: Path to the resulting .zar file.
+    """
+    if shutil.which("zarchive") is None:
+        raise RuntimeError("zarchive is not installed or not available on PATH.")
+
+    output_file = source_dir.parent / f"{source_dir.name}.zar"
+    if output_file.exists():
+        output_file.unlink()  # zarchive refuses to run if the output already exists
+    subprocess.run(["zarchive", str(source_dir), str(output_file)], check=True)
+
+    if remove_source:
+        shutil.rmtree(source_dir)
+
+    return output_file
