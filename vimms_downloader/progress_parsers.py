@@ -6,6 +6,13 @@ filesystem or subprocess state directly — they take a single line of text
 pre-computed file count) and return an int 0-100, or None if the line
 doesn't carry progress info.
 
+7z is deliberately not covered here — 7-Zip redraws its own progress in
+place using backspace characters rather than newlines/carriage returns, so
+it never produces discrete lines a line-by-line reader can parse. Its
+progress instead comes from byte-size polling (see
+count_archive_uncompressed_size()/extract_archive()'s on_progress in
+downloader.py), independent of this module.
+
 Ad hoc CLI progress text isn't a stable contract, so every parser here
 fails soft: a line it doesn't recognize just yields None rather than
 raising, and the caller keeps showing the phase as "running" with no (or
@@ -15,7 +22,6 @@ its last known) percentage.
 import re
 
 _ARIA2_PERCENT_RE = re.compile(r"\((\d{1,3})%\)")
-_7Z_PERCENT_RE = re.compile(r"(?:^\s*(\d{1,3})%|\s(\d{1,3})%\s*$)")
 _EXTRACT_XISO_FILE_RE = re.compile(r"^extracting\s+.+\[(\d{1,3})%\]\s*$", re.IGNORECASE)
 _ZARCHIVE_ADDING_RE = re.compile(r"^Adding\s+")
 
@@ -35,20 +41,6 @@ def parse_aria2c_line(line: str) -> int | None:
     if not m:
         return None
     return _clamp(int(m.group(1)))
-
-
-def parse_7z_line(line: str) -> int | None:
-    """
-    Parse a 7z progress line. 7-Zip's classic style prints the percentage
-    near the start of the line (e.g. "  3% 2 - somefile.bin"); some
-    versions/modes instead show it trailing. Try both; caller should treat
-    a None as "no new info" rather than a regression.
-    """
-    m = _7Z_PERCENT_RE.search(line)
-    if not m:
-        return None
-    percent = m.group(1) or m.group(2)
-    return _clamp(int(percent))
 
 
 def is_extract_xiso_file_line(line: str) -> bool:

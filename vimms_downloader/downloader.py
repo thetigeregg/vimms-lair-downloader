@@ -9,6 +9,7 @@ a previous one. Any failed attempt is retried with an increasing delay.
 import re
 import shutil
 import subprocess
+import threading
 import time
 from pathlib import Path
 from typing import Callable
@@ -22,6 +23,7 @@ ARIA2_MAX_RETRIES = 5
 ARIA2_RETRY_BASE_DELAY = 5  # seconds; doubles after each retry
 
 OnLine = Callable[[str], None]
+OnProgress = Callable[[int], None]
 
 
 # --------------------------------------------------------------------------
@@ -170,13 +172,69 @@ def find_downloaded_archive(out_dir: Path) -> Path | None:
     return archives[0] if archives else None
 
 
-def extract_archive(archive_path: Path, remove_after: bool = False, on_line: OnLine | None = None) -> Path:
+_7Z_TOTAL_SIZE_RE = re.compile(r"^(\d+)\s+\d+\s+\d+\s+files?,\s+\d+\s+folders?\s*$")
+
+
+def count_archive_uncompressed_size(archive_path: Path) -> int | None:
+    """
+    Best-effort total uncompressed size (bytes) of a .7z archive's contents,
+    via `7z l`. Used to turn bytes-written-so-far during extraction into a
+    percentage — 7-Zip's own live progress redraws in place using backspace
+    characters rather than newlines or carriage returns, which our line-by-
+    -line output reader can't split into discrete updates, so byte polling
+    (see extract_archive()'s on_progress) is used instead of parsing 7z's
+    own progress text. `7z l`'s listing ends with a summary line like
+    "<date> <time>          150000000    150009444  3 files, 1 folders" —
+    that's what's parsed here. Returns None (not an error) if 7z is
+    unavailable or the listing can't be parsed.
+    """
+    if shutil.which("7z") is None:
+        return None
+    try:
+        result = subprocess.run(
+            ["7z", "l", str(archive_path)],
+            capture_output=True, text=True, check=False,
+        )
+    except OSError:
+        return None
+    for line in result.stdout.splitlines():
+        parts = line.strip().split(None, 2)  # date, time, "<size> <compressed> N files, M folders"
+        if len(parts) == 3:
+            m = _7Z_TOTAL_SIZE_RE.match(parts[2])
+            if m:
+                return int(m.group(1))
+    return None
+
+
+def _dir_size(path: Path) -> int:
+    try:
+        return sum(p.stat().st_size for p in path.rglob("*") if p.is_file())
+    except OSError:
+        return 0
+
+
+def _poll_dir_size(out_dir: Path, total_size: int, on_progress: OnProgress, stop: threading.Event) -> None:
+    while not stop.wait(1.0):
+        percent = max(0, min(99, int(_dir_size(out_dir) / total_size * 100)))
+        on_progress(percent)
+
+
+def extract_archive(
+    archive_path: Path,
+    remove_after: bool = False,
+    on_line: OnLine | None = None,
+    on_progress: OnProgress | None = None,
+) -> Path:
     """
     Extract a .7z archive into its containing directory using the `7z` CLI.
 
     :param archive_path: Path to the .7z archive.
     :param remove_after: Delete the archive once extraction succeeds.
     :param on_line: See _run().
+    :param on_progress: Called roughly once a second with an int 0-100,
+        estimated by polling the extraction directory's total size against
+        the archive's known uncompressed size (see
+        count_archive_uncompressed_size()) — not from 7z's own output.
     :return: The directory the archive was extracted into.
     """
     if shutil.which("7z") is None:
@@ -184,9 +242,29 @@ def extract_archive(archive_path: Path, remove_after: bool = False, on_line: OnL
 
     out_dir = archive_path.parent
     cmd = ["7z", "x", str(archive_path), f"-o{out_dir}", "-y"]
-    returncode, output = _run(cmd, on_line)
+
+    poll_thread = None
+    stop_polling = threading.Event()
+    if on_progress is not None:
+        total_size = count_archive_uncompressed_size(archive_path)
+        if total_size:
+            poll_thread = threading.Thread(
+                target=_poll_dir_size, args=(out_dir, total_size, on_progress, stop_polling), daemon=True,
+            )
+            poll_thread.start()
+
+    try:
+        returncode, output = _run(cmd, on_line)
+    finally:
+        stop_polling.set()
+        if poll_thread is not None:
+            poll_thread.join(timeout=2)
+
     if returncode != 0:
         raise subprocess.CalledProcessError(returncode, cmd, output=output)
+
+    if on_progress is not None:
+        on_progress(100)
 
     if remove_after:
         archive_path.unlink()

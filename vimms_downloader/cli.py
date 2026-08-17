@@ -33,7 +33,6 @@ from vimms_downloader.models import SYSTEMS
 from vimms_downloader.progress_parsers import (
     is_extract_xiso_file_line,
     is_zarchive_adding_line,
-    parse_7z_line,
     parse_aria2c_line,
     percent_from_file_count,
 )
@@ -299,6 +298,7 @@ class Reporter(Protocol):
     def phase_warn(self, game_id: int, phase: str, message: str) -> None: ...
     def set_total_files(self, game_id: int, phase: str, total: Optional[int]) -> None: ...
     def on_line(self, game_id: int, phase: str) -> Optional[Callable[[str], None]]: ...
+    def on_progress(self, game_id: int, phase: str) -> Optional[Callable[[int], None]]: ...
 
 
 class ConsoleReporter:
@@ -356,6 +356,9 @@ class ConsoleReporter:
         if phase == "download":
             return None  # aria2c always stays live-inherited
         return (lambda line: None) if self.pipelined else None
+
+    def on_progress(self, game_id, phase):
+        return None  # no live table to update in the plain-text path
 
 
 class StatusBoardReporter:
@@ -425,8 +428,10 @@ class StatusBoardReporter:
     def _parse_progress(self, game_id, phase, line) -> Optional[int]:
         if phase == "download":
             return parse_aria2c_line(line)
-        if phase == "7z":
-            return parse_7z_line(line)
+        # 7z is handled via on_progress() (byte-size polling) instead of line
+        # parsing — 7-Zip redraws its own progress in place using backspace
+        # characters rather than newlines/carriage returns, so it never
+        # produces discrete lines our reader could parse for a percentage.
         if phase in ("extract-xiso", "zar"):
             is_file_line = is_extract_xiso_file_line(line) if phase == "extract-xiso" else is_zarchive_adding_line(line)
             if not is_file_line:
@@ -435,6 +440,11 @@ class StatusBoardReporter:
             self._file_counts[key] = self._file_counts.get(key, 0) + 1
             return percent_from_file_count(self._file_counts[key], self._file_totals.get(key))
         return None
+
+    def on_progress(self, game_id, phase):
+        def _handler(percent: int) -> None:
+            self.board.update_phase(game_id, phase, state="running", percent=percent)
+        return _handler
 
     def close(self, game_id: int) -> None:
         f = self._log_files.pop(game_id, None)
@@ -590,7 +600,11 @@ def _postprocess_stage(
             return False
         try:
             with reporter.phase(item.game_id, "7z", f"Extracting {archive.name}..."):
-                extract_archive(archive, remove_after=delete_archive, on_line=reporter.on_line(item.game_id, "7z"))
+                extract_archive(
+                    archive, remove_after=delete_archive,
+                    on_line=reporter.on_line(item.game_id, "7z"),
+                    on_progress=reporter.on_progress(item.game_id, "7z"),
+                )
             reporter.phase_done(item.game_id, "7z", f"Extracted: {archive.parent}")
         except subprocess.CalledProcessError as e:
             reporter.phase_failed(item.game_id, "7z", f"Extraction failed (exit code {e.returncode}).")
